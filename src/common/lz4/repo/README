@@ -1,0 +1,7 @@
+git://github.com/jpountz/lz4-java.git
+
+commit 941819cf560726691bdec66aaf78ada2158114fd
+Author: Adrien Grand <jpountz@gmail.com>
+Date:   Fri Dec 28 11:30:27 2012 +0100
+
+    Update LZ4 to r87.

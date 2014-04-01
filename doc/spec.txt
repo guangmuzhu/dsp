@@ -1,0 +1,1798 @@
+Generic Session Protocol Specification
+======================================
+
+ Version: 0.1
+    Date: 05/23/2012
+
+
+This specification defines a generic session protocol, which supports
+the request-reply pattern for communication between two networked
+peers. In contrast to the traditional RPC model, which focuses
+exclusively on data encoding and wire framing, the protocol supports
+advanced connectivity model, better failure semantics, higher
+resilience through error recovery, built-in security, asynchronous
+callback, among other things. The objective is to simplify network
+applications by abstracting away the lower level details found in
+network communication.
+
+The current incarnation of the protocol incorporates some of the key
+protocol elements from the two modern data protocols, namely iSCSI and
+NFSv4.1, both of which have the session concept in block and file
+context respectively. At the same time, it tries to avoid some of the
+pitfalls which added to the complexity of those protocols. This
+approach (of leveraging proven techniques) helps project early
+confidence that the design of the protocol will not be an impediment to
+the application demands in terms of performance, scalability, and
+resilience.
+
+
+1. Motivations
+
+1.1. Use Cases
+
+There are a variety of use cases in the delphix environment that require
+cross host communications. The following is an incomplete list of both
+current and future use cases, all of which could benefit from a generic
+session protocol as the underlying communication substrate.
+
+  o replication
+  o shadow replication
+  o snapsync
+  o logsync
+  o target host
+  o centralized management
+  o clustering
+
+The division of duty between these applications and the protocol is so
+that the former will define the semantics of the command set while the
+latter focuses on the delivery aspect only.
+
+
+1.2. Requirements
+
+Due to the diversity of the use cases we are targeting with the generic
+session protocol, the requirements vary a great deal. That implies the
+combined feature set for the generic session protocol will be non-trivial
+even though not all the features may be used by any one application.
+
+  Goals
+
+  o session authentication
+  o session privacy
+  o header digest
+  o data digest
+  o exactly-once*
+  o ordered delivery
+  o concurrent execution
+  o task management
+  o session recovery
+  o connection recovery
+  o asynchronous callback
+  o flow control
+  o negotiable data segment size
+  o multi-connection
+
+  * in a limited sense only since full guarantee will require more than
+    just the protocol support.
+
+  Non-goals
+
+  o within command recovery
+    - partial command recovery within the same command
+  o within connection recovery
+    - whole command recovery within the same connection
+  o multi-task abort
+    - response fencing in multi-connection
+  o multi-segment data transfer (a.k.a., large message support)
+
+
+2. Connectivity Model
+
+
+                                                               --+
+              +---------+                     +---------+        |  Service
+              | Service |                     | Service |        |  Registry
+              |  <UUID> |                     |  <UUID> |        |
+              +---------+                     +---------+      --+
+                   |                               |
+              +---------+                     +---------+      --+
+              | Session |                     | Session |        |
+              |  <SHDL> |                     |  <SHDL> |        |
+              +---------+                     +---------+        |  Server
+                   |                               |             |  Protocol
+         +---------+---------+                     |             |  Stack
+         v         v         v                     v             |
+     +------+   +------+   +------+             +------+         |
+     | Conn |   | Conn |   | Conn |             | Conn |         |
+     +------+   +------+   +------+             +------+         |
+         |         |         |                     |             |
+         +---------+         |                     |             |
+             |               |                     |             |
+   +---------v---------------v-------+     +-------v---------+   |
+   |   +---------+     +---------+   |     |   +---------+   |   |
+   |   | Network |     | Network |   |     |   | Network |   |   |
+   |   |  Portal |     |  Portal |   |     |   |  Portal |   |   |
+   |   +---------+     +---------+   |     |   +---------+   |   |
+   |                                 |     |                 |   |
+   |          portal group           |     |  portal group   |   |
+   +---------------------------------+     +-----------------+ --+
+
+
+
+
+         +---------+              +---------+                  --+
+         | Network |              | Network |                    |
+         |  Portal |              |  Portal |                    |
+         +---------+              +---------+                    |
+              ^                        ^                         |
+              |                        |                         |
+         +---------+          +--------------------+             |
+         |         |          |                    |             |
+     +------+   +------+   +------+             +------+         |
+     | Conn |   | Conn |   | Conn |             | Conn |         |
+     +------+   +------+   +------+             +------+         |  Client
+         ^         ^         ^                     ^             |  Protocol
+         +---------+---------+                     |             |  Stack
+                   |                               |             |
+              +---------+                     +---------+        |
+              | Session |                     | Session |        |
+              |  <SHDL> |                     |  <SHDL> |        |
+              +---------+                     +---------+      --+
+                   |                               |
+              +---------+                     +---------+      --+
+              | Client  |                     | Client  |        |  Client
+              +---------+                     +---------+        |  App
+                                                               --+
+
+
+See Section 5 for detailed description of the connectivity object
+state transitions.
+
+
+3. Operational Mechanics
+
+    client app                                                server app
+
+        ||                       network                          ||
+        \/                                                        \/
+                          --+       _        +--
+  +---+---+---+    +---+    |     _/ \__     |    +---+    +---+---+---+---+
+  |SID|SEQ|REQ|    |   |    |    /      \    |    |   |    |SID|SEQ|REQ|RSP|
+  +---+---+---+    +---+    <===/========\===>    +---+    +---+---+---+---+
+  | 0 | 9 | - |    | w |    |  /         |   |    | w |    | 0 | 9 | u | v |
+  +---+---+---+    +---+    |   \         \  |    +---+    +---+---+---+---+
+  | 1 | 4 | w |    |   |    <====|========/==>    |   |    | 1 | 5 | w | - | <= active
+  +---+---+---+    +---+    |   /        /   |    +---+    +---+---+---+---+    command
+       ...          ...     |  /        /    |     ...            ...
+  +---+---+---+    +---+    <==\=======|=====>    +---+    +---+---+---+---+
+  | N | 8 | - |    |   |    |   \       \    |    |   |    | N | 8 | y | z |
+  +---+---+---+    +---+    |    \       \   |    +---+    +---+---+---+---+
+                            <=====\=======|==>
+   slot table       cmd     |      \   __/   |     cmd         slot table
+                   queue    |       \_/      |    queue
+                          --+                +--
+
+     client session             connection               server session
+                                  trunk
+
+
+A command is submitted to the session for processing. The following
+describes the command processing mechanics.
+
+  o client
+    - application issues command to session
+    - session allocates a free slot in the slot table
+    - session allocates the next sequence number for the command
+    - session selects a connection and sends the command over it
+  o server
+    - session receives the command and subject it to sequencing
+    - session enters the command in the slot table and dispatches it
+    - application picks up the command and starts processing it
+    - application completes the command processing
+    - session enters the response in the slot table
+    - session sends the response back over the command connection
+  o client
+    - session receives the response
+    - session updates the slot table and notifies the application
+
+See Section 5 for detailed discussion on failure semantics and error
+recovery.
+
+
+3.1. Command Queue
+
+Each session has a command queue. Each command entering the session is
+placed at the end of the command queue. The queue slot is identified
+by a session-wide command sequence that increases with each command
+added to it.
+
+Using connection trunking, each command may be sent over a different
+connection and therefore arrive out of order on the server. The server
+queues the incoming commands by the command sequence and dispatch them
+to the application in the same order as they were processed by the
+client.
+
+The command sequence also serves as the demarcation for multi-command
+abort. The multi-command abort specifies a reference command sequence
+and any commands with sequence lower than that are subject to abort.
+
+
+3.2. Slot Table
+
+For command processing, we are using a slot table mechanism similar to
+the one adopted by NFSv4.1. Each session has a slot table with a bounded
+size. A command must be assigned a slot before it can be activated over 
+the session. A slot can be assigned to at most one outstanding command
+at a time. The number of outstanding commands over the session is
+therefore limited by the size of the slot table.
+
+The size of the slot table is advertised by the server during session
+creation. Subsequently, the size of the slot table may be dynamically
+adjusted, either increased or decreased, by the server; and the client
+is notified of the change via information carried in each response. In
+case of decrease in size, the client is given the chance to quiesce
+outstanding commands to reduce the slot table size until it reaches
+the limit set by the server. This mechanism allows dynamic command
+flow control to be implemented over the session.
+
+Each slot also carries a sequence. The sequence starts from 0 and is
+incremented for each command processed over the slot. The sequence
+serves two distinct purposes.
+
+  o It indicates a retry of the same command in case of sequence match.
+  o It acknowledges the receipt of the response of the previous
+      command on the slot in case the new sequence is 1 over the
+      current value. 
+
+Normally, the client and the server agree on the sequence for each
+slot. When a command must be terminated on the client, the view may
+diverge temporarily. We resort to task management to bring the two
+views back into agreement again. See Section 5 for details.
+
+
+4. Session Management
+
+4.1. Connection Login
+
+Login is the first step undertaken by a newly established connection.
+It is through login that a connection creates a new session, joins an
+existing session, and performs session recovery such as session
+continuation and session reinstatement.
+
+
+4.1.1. Login Process
+
+The login process has a maximum of four phases from when the
+transport connection is established until the connection is ready for
+normal operation.
+
+  1) initial exchange
+
+  The initial login exchange is initiated by the client and involves a
+  pair of messages, one in each direction. This exchange does the
+  following:
+
+    - negotiate the protocol version support
+    - announce the client identity to the server
+    - negotiate an optional SSL phase
+    - announce the server supported SASL mechanisms to the client
+
+  2) SSL negotiation (optional)
+
+  The SSL negotiation is done outside of the protocol. Upon completion
+  of the SSL negotiation, the protocol shall be notified and protocol
+  login continues after that.
+
+  In case both sides agree not to have SSL, this phase shall be
+  skipped.
+
+  3) SASL negotiation
+
+  SASL is a mandatory phase in the protocol login process. Server
+  announces the SASL mechanisms it supports in the first login phase.
+  Client chooses one of SASL mechanisms from the list to for
+  authentication purpose.
+
+  To skip authentication, the SASL mechanism "ANONYMOUS" may be used if
+  both sides agree.
+
+  SASL negotiation may involve multiple exchanges between client and
+  server. The initial request from the client should select the
+  mechanism and include any optional data. The server is required to
+  send a final outcome upon completion of the SASL engine with optional
+  data.
+
+  4) operational parameter negotiation
+
+  After security negotiation is completed, the client and the server may
+  have a final exchange for operational parameter negotiation. It
+  involves a pair of message initiated by the client.
+
+
+4.1.2. Session Instantiation
+
+Session handle refers to a short-hand identifier for the data
+structure instantiated on the server to represent the session
+state. The session handle is volatile unless the server chooses to
+persist session state.
+
+The client and service ID together identify the two endpoints of the
+session. The client ID should be persistent and unique such that it
+can be used to reliably identify whether an existing session belongs
+to the same client for the sake of session reinstatement (see failure
+semantics for details).
+
+Between a specific client and service instance, connection login
+results in the following server actions in regards to the session.
+
+Client ID         Session Handle            Server Action
+---------         --------------            -------------
+non-existent      non-null                  fail login attempt
+non-existent      null                      instantiate new session
+existing          null                      session reinstatement
+existing          non-null && existing      add connection
+existing          non-null && non-existent  fail login attempt
+
+
+4.1.3. Session Security
+
+Security layers are used to establish an authenticated and/or
+encrypted transport over which regular protocol traffic can be
+tunneled. Security layers may be tunneled through one another (for
+instance a security layer used by the peers to do authentication may
+be tunneled through a security layer established for encryption
+purposes).
+
+While SASL supports the notion of a security layer with certain
+quality of services, such as integrity and privacy, the support is not
+generally available in all the SASL mechanisms. Instead, we opt to use
+SSL for wire encryption if necessary and SASL for authentication
+only. SASL as well as regular traffic are tunneled through the SSL
+channel.
+
+Conversely, SSL supports certificate based authentication of the
+client. But we opt to use SASL based mechanism to authenticate the
+client.
+
+The framing and protocol definitions for security layers are expected
+to be defined externally to the session protocol specification as in
+the case of TLS [RFC5246]. An exception to this is the SASL [RFC4422]
+security layer which depends on its host protocol to provide framing.
+
+When a security layer terminates (either before or after a secure
+tunnel is established), the TCP connection MUST be closed by first
+shutting down the outgoing stream and then reading the incoming stream
+until it is terminated.
+
+
+4.1.4. Login Failures
+
+The login process may fail due to a variety of reasons.
+
+ - transport failure
+ - security failure
+ - parameter mismatch
+ - service unavailability
+
+It may fail at any stage during the login process over the
+connection.
+
+It may fail at any stage of the parent session, including initial
+session creation, session continuation, session reinstatement, or
+while adding connection to a working session.
+
+Client shall not retry a login request. When the connection is
+healthy, there is no need to resend a login request. When the
+connection is lost, the login process should be aborted. In other
+words, login is specific to each connection.
+
+Server should remove the connection as soon as it detects its
+loss. In addition, it may implement a keep-alive mechanism for each
+connection and remove connections that have timed out. As a result,
+server does not have to do anything for lost login responses.
+
+
+4.1.5. Operational Parameters
+
+The following may be negotiated as operational parameters for the
+session.
+
+ parameters                   scope              use
+ ---------------------        -----------        -------------
+ Client                       session            phase 1)
+ Service                      session            phase 1)
+ SSL                          connection         phase 1)
+ SASLMechanisms               connection         phase 1)
+ MaxDataSegmentLength         connection         phase 4)
+ HeaderDigest                 connection         phase 4)
+ DataDigest                   connection         phase 4)
+ MaxConnections               session            phase 4)
+ SessionTimeout               session            phase 4)
+ ConnectionTimeout            connection         phase 4)
+
+
+4.1.6. Login Example
+
+Here is an example that illustrates the exchanges during the login
+process.
+
+client                              server
+------                              ------
+
+  |          protocol version          |
+  |          session handle            |
+  |          client                    |
+  |          service                   |
+  |          ssl = true                |
+  |      ------------------------>     |
+  |                                    |
+  |          ssl = true                |
+  |          sasl mechs = <list>       |
+  |      <------------------------     |
+  |                                    |
+  |        ssl negotiation start       |
+  |      ========================>     |
+  |      <========================     |
+  |                ...                 |
+  |        ssl negotiation end         |
+  |      <========================     |
+  |                                    |
+  |       sasl mech = "SKEY"           |
+  |       sasl initital response       |
+  |      ------------------------>     |
+  |                                    |
+  |           sasl challenge           |
+  |      <------------------------     |
+  |           sasl response            |
+  |      ------------------------>     |
+  |                ...                 |
+  |                                    |
+  |           sasl outcome             |
+  |      <------------------------     |
+  |                                    |
+  |         operational params         |
+  |      ------------------------>     |
+  |         operational params         |
+  |      <------------------------     |
+  |                                    |
+  v                                    v
+
+
+4.2. Logout
+
+  Client may want to decommission one of the connections from a session,
+  or it may want to tear down the entire session, all in an orderly manner.
+  Connection logout allows the client to close the connection over which
+  the logout request is sent or to close the session of which the connection
+  is a member.
+
+  Client should avoid logging out of the connection or session when there
+  are outstanding commands associated with each in the fore channel.
+
+  The activities over the back channel is driven by the server and therefore
+  completely asynchronous with respect to the client. As such, connection
+  logout may be initiated by the client while commands over the back channel
+  are still in flight.
+
+  While we could treat the back channel in a brute-force manner when it comes
+  to the handling outstanding commands during logout, it is possible to handle
+  it more gracefully if the client and server adhere to the following.
+
+
+4.2.1. Client
+
+  After a connection close is initiated, the client should continue to process
+  the commands arrived in the back channel over the connection in question
+  except that it won't be able to send the response back. Since the session
+  is still alive, the server may retry those commands over a different
+  connection after the connection is logged out.
+
+  After a session close is initiated, the client should also process the
+  commands arrived in the back channel.
+
+
+4.2.2. Server
+
+  For connection close, any outstanding commands in either the fore or back
+  channel associated with the connection shall be processed as usual. For
+  outstanding commands in the fore channel, we expect that the client shall
+  either retry the commands or abort them over a different connection. For
+  those in the back channel, it is up to the server to either close the
+  connection immediately and retry the commands over a different connection
+  or wait for the response before closing the connection.
+
+  For session close, any outstanding commands in the fore channel shall be
+  terminated immediately. For outstanding commands in the back channel, it
+  is up to the server to either abort them or wait for their response before
+  tearing down the session.
+
+
+5. Failure Semantics
+
+5.1. Consistency Requirements
+
+  o command termination between client and server
+
+  Before a client terminates a command, it must ensure that the same
+  command is terminated on the server. Termination implies the command
+  has reached one of the terminal states and won't be processed again.
+
+  Client may terminate a command due to normal completion or task
+  management.
+
+  If a command is left active on the server when it is terminated on
+  the client, it could lead to data corruption.
+
+  o command termination between client and network
+
+  When a command is terminated by the client, no more response for the
+  command should arrive later for the same command.
+
+  If a response is allowed to arrive at the client after the command
+  has been terminated, it would lead to confusion at best (no way to
+  disambiguate from protocol violation) and data corruption at the
+  worst.
+
+  o exactly-once delivery and processing status
+
+  For non-idempotent commands.
+
+  Full support of exactly-once semantics requires transactional
+  support on the server in addition to protocol support.
+
+
+5.2. Error Recovery Strategies
+
+  o command timeout
+
+  Allow command to timeout.
+
+  Command may timeout due to slow/lossy connection or slow server-side
+  processing.
+
+  Application sets timeout value before issuing a command and must be
+  prepared to handle it when timeout occurs.
+
+  o connection recovery
+
+  Recover from connection loss automatically.
+
+  Connection may be lost due to various reasons including link down,
+  connection reset, and timeout.
+
+  In the case when session state is intact, connection failures,
+  including APD, can be recovered by enabling session continuation.
+
+  No impact to application except for possible command timeout.
+
+  o session recovery
+
+  Recover from session loss automatically.
+
+  Session may be lost when either client or server throw away the
+  session state due to various reasons including:
+
+    - application timeout
+    - resource constraints
+    - state corruptions
+
+  Session continuation is impossible in this case given the state
+  loss. Application must be involved in error recovery. Session
+  reinstatement is attempted to wipe out lingering session state
+  on the server.
+
+
+5.3. Task Management
+
+Task management is used to make sure a command is quiesced on the
+server and to synchronize the slot sequence between the two parties.
+
+The command may be in just about any state upon the arrival of the
+task management request.
+
+  - command has not arrived (since the task management is sent over a
+    different connection from the command); command may arrive after
+    the task management or it may not
+  - command has arrived out of sequence order and is waiting for
+    ordering constraint
+  - command has started and is currently in progress
+  - command has already completed
+
+
+5.4. Failure Scenarios
+
+  o client connection loss
+
+  Connection loss is detected by the transport layer and reported as
+  an upstream event. Following this event, the connection must be dead
+  from the client perspective in the sense that no data will arrive
+  again from the connection.
+
+  Commands pending on the connection (previously dispatched over the
+  connection and still waiting for the full response) will be severed
+  from the connection immediately upon its loss.
+
+  The commands severed from the lost connection are resent over a
+  healthy connection in the same session if one exists. Otherwise,
+  they are queued waiting for the session to recover or timeout,
+  whichever happens first.
+
+  In the meantime, the session is notified of the connection loss and
+  the session state transitions accordingly. An attempt is made to
+  restore the lost connection to the server periodically. Once
+  restored, an event is reported to the session.
+
+  The corresponding server side connection may be in a different
+  state.
+
+  o server connection loss
+
+  Connection loss is detected by the transport layer and reported as
+  an upstream event. Following this event, the connection must be dead
+  from the server perspective in the sense that no data will arrive
+  again from the connection.
+
+  The session is notified of the connection loss and the session state
+  transitions accordingly.
+
+  The corresponding client side connection may be in a different
+  state.
+
+  o client command timeout
+
+  When a command has reached timeout set by the application, it needs
+  to be terminated on the client side. The client must ensure the
+  command isn't in an inconsistent state elsewhere in the server or
+  over the network.
+
+    - command connection healthy
+
+  When the command connection is still healthy, we may continue to
+  receive response from it, including the response for the command
+  that just timed out.
+
+  To reach a consistent state with the server and the network, we need
+  to send a task management request to abort the command over this
+  connection. The successful completion of the task management request
+  ensures the command is no longer active on the server nor will we
+  receive its response over the network.
+
+  Refer to the connection loss case if the command connection is lost
+  before the task management response is received...
+
+    - command connection loss
+
+  When the command connection is lost, we will not receive response
+  for the command. But the command may still be active on the server.
+
+  We need to send a task management request to abort the command over
+  a healthy connection in the same session to ensure the command is no
+  longer active on the server.
+
+  We need to resend the task management request just in case the
+  connection chosen above is lost again. Refer to the session APD case
+  if all connections are lost.
+
+    - session APD
+
+  When the session has reached APD, there is no connection over which
+  we can send the task management request. Hence, there is no way we
+  will be able to ensure the command is no longer active on the
+  server. Before we terminate the command unilaterally, we record it
+  as part of the session state. During session continuation, we will
+  resend the task management request for the command to ensure the
+  command is no longer active within the continued session.
+
+  o client session APD
+
+  After the client has lost all connections to the server, the session
+  will be in an all-path-down state before at least one connection is
+  restored. While in such a state, the client and the server may
+  develop diverging views of the session.
+
+  If both the client and the server choose to hold on to the session
+  and all of its associated state indefinitely, they will be able to
+  continue the session once connectivity is restored.
+
+  If the client holds on to the session state when it exits APD, it
+  will attempt session continuation with the server using the same
+  session identifier. If the server hasn't freed the session state,
+  the session will be continued without impact to the application.
+
+  o server session APD
+
+  After the server has lost all connections to the client, the session
+  will be in an all-path-down state before at least one connection is
+  restored. While in such a state, the client and the server may
+  develop diverging views of the session.
+
+  o client session loss
+
+  The client may decide to abandon the session after APD and establish
+  a new session with the server after connectivity is restored.
+
+  The client will have lost all of the states associated with the old
+  session after it abandons it. However, the same cannot be said
+  regarding the session on the server. It is worth noting there may
+  still be active commands over the server end of the session.
+
+  To avoid this situation, we require the new session request from the
+  client reinstate the old session still dangling on the server. Session
+  reinstatement involves the quiescing of the old session.
+
+  o server session loss
+
+  The server may decide to abandon the session after APD in which case
+  it has lost all of the states associated with the client.
+
+  If the client has kept the session state, it will attempt to
+  continue the session when connectivity is restored and the session
+  continuation attempt will be failed due to session not found.
+
+
+6. State Machines
+
+The connection and session state machines defined here are similar to
+those defined in the iSCSI protocol. The session state machines are
+nearly identical while the connection state machines are significantly
+simplified with the elimination of connection state recovery and
+asynchronous (i.e., server requested) logout.
+
+
+6.1. Connection
+
+6.1.1. Client Connection
+
+                          +--------------+
+                          |              |
+                          v              |
+           +----+-----------+            |
+     +---->| S1 |    FREE   |<----+      |
+     |     +----+-----------+     |      |
+     |    T1 |            ^ T2    |      |
+     |       v            |       |      |
+     |     +----+-----------+     |      |
+     |     | S2 | XPRT_WAIT |     | T7   | T13
+     |     +----+-----------+     |      |
+     |    T4 |                    |      |
+  T8 |       v                    |      |
+     |     +----+-----------+     |      |
+     |     | S4 | IN_LOGIN  |-----+      |
+     |     +----+-----------+            |
+     |    T5 |                           |
+     |       v                           |
+     |     +----+-----------+            |
+     +-----| S5 | LOGGED_IN |            |
+           +----+-----------+            |
+          T9 |                           |
+             v                           |
+           +----+-----------+            |
+           | S6 | IN_LOGOUT |------------+
+           +----+-----------+
+
+
+   The state transition table is as follows:
+
+         +----+---+---+---+---+
+         |S1  |S2 |S4 |S5 |S6 |
+      ---+----+---+---+---+---+
+       S1| -  |T1 | - | - | - |
+      ---+----+---+---+---+---+
+       S2|T2  |-  |T4 | - | - |
+      ---+----+---+---+---+---+
+       S4|T7  |-  |-  |T5 | - |
+      ---+----+---+---+---+---+
+       S5|T8  |-  |-  | - |T9 |
+      ---+----+---+---+---+---+
+       S6|T13 |-  |-  | - | - |
+      ---+----+---+---+---+---+
+
+
+6.1.2. Server Connection
+
+                          +--------------+
+                          |              |
+                          v              |
+           +----+-----------+            |
+     +---->| S1 |    Free   |<----+      |
+     |     +----+-----------+     |      |
+     |    T3 |            ^ T6    |      |
+     |       v            |       |      |
+     |     +----+-----------+     |      |
+     |     | S3 |  XPRT_UP  |     | T7   | T13
+     |     +----+-----------+     |      |
+     |    T4 |                    |      |
+  T8 |       v                    |      |
+     |     +----+-----------+     |      |
+     |     | S4 | IN_LOGIN  |-----+      |
+     |     +----+-----------+            |
+     |    T5 |                           |
+     |       v                           |
+     |     +----+-----------+            |
+     +-----| S5 | LOGGED_IN |            |
+           +----+-----------+            |
+          T9 |                           |
+             v                           |
+           +----+-----------+            |
+           | S6 | IN_LOGOUT |------------+
+           +----+-----------+
+
+
+   The state transition table is as follows:
+
+      +----+---+---+---+---+
+      |S1  |S3 |S4 |S5 |S6 |
+   ---+----+---+---+---+---+
+    S1| -  |T3 | - | - | - |
+   ---+----+---+---+---+---+
+    S3|T6  |-  |T4 | - | - |
+   ---+----+---+---+---+---+
+    S4|T7  |-  |-  |T5 | - |
+   ---+----+---+---+---+---+
+    S5|T8  |-  |-  | - |T9 |
+   ---+----+---+---+---+---+
+    S6|T13 |-  |-  | - | - |
+   ---+----+---+---+---+---+
+
+
+6.1.3. Connection States
+
+  -S1: FREE
+    -client: State on instantiation, or after successful connection
+        closure.
+    -server: State on instantiation, or after successful connection
+        closure.
+  -S2: XPT_WAIT
+    -client: Waiting for a response to its transport connection
+        establishment request.
+    -server: Illegal
+  -S3: XPT_UP
+    -client: Illegal
+    -server: Waiting for the Login process to commence.
+  -S4: IN_LOGIN
+    -client: Waiting for the Login process to conclude, possibly
+        involving several PDU exchanges.
+    -server: Waiting for the Login process to conclude, possibly
+        involving several PDU exchanges.
+  -S5: LOGGED_IN
+    -client: Waiting for all internal, protocol, and transport events.
+    -server: Waiting for all internal, protocol, and transport events.
+  -S6: IN_LOGOUT
+    -client: Waiting for a Logout response.
+    -server: Waiting for an internal event signaling completion of
+        logout processing.
+
+
+6.1.4. Connection State Transitions
+
+   -T1:
+        -client: Transport connect request was made (e.g., TCP SYN
+            sent).
+        -server: Illegal
+   -T2:
+        -client: Transport connection request timed out or a transport
+            reset was received.
+        -server:Illegal
+   -T3:
+        -client: Illegal
+        -server: Received a valid transport connection request that
+            establishes the transport connection.
+   -T4:
+        -client: Transport connection established, thus prompting the
+            client to start the Login.
+        -server: Initial Login Request was received.
+   -T5:
+        -client: The final Login Response with a success status was
+            received.
+        -server: The final Login Request to conclude the Login
+            Phase was received, thus prompting the server to send the
+            final Login Response with a success status.
+   -T6:
+        -client: Illegal
+        -server: Timed out waiting for a Login, transport disconnect
+            indication was received, transport reset was received, or
+            an internal event indicating a transport timeout was
+            received. In all these cases, the connection is to be closed.
+   -T7:
+        -client: One of the following events caused the transition:
+            - The final Login Response was received with a failure status.
+            - Login timed out.
+            - A transport disconnect indication was received.
+            - A transport reset was received.
+            - An internal event was received indicating a transport
+              timeout.
+            - An internal event of receiving a Logout response (success)
+              on another connection for a "close the session" Logout
+              request was received.
+            In all these cases, the transport connection is closed.
+
+        -server: One of the following events caused the transition:
+            - The final Login Request to conclude the Login Phase was
+              received, prompting the server to send the final Login
+              Response with a failure status.
+            - Login timed out.
+            - Transport disconnect indication was received.
+            - Transport reset was received.
+            - An internal event indicating a transport timeout was
+              received.
+            - On another connection a "close the session" Logout
+              request was received.
+            In all these cases, the connection is to be closed.
+   -T8:
+        -client: An internal event of receiving a Logout response
+            (success) on another connection for a "close the session"
+            Logout request was received, thus closing this connection
+            requiring no further cleanup.
+        -server: An internal event of sending a Logout response
+            (success) on another connection for a "close the session"
+            Logout request was received, or an internal event of a
+            successful session reinstatement is received, thus
+            prompting the server to close this connection cleanly.
+   -T13:
+        -client: An Logout response (success) was received, or an
+            internal event of receiving a Logout response (success)
+            on another connection for a "close the session" Logout
+            request was received.
+        -server: An internal event was received that indicates
+            successful processing of the Logout, which prompts an
+            Logout response (success) to be sent; an internal event of
+            sending a Logout response (success) on another connection
+            for a "close the session" Logout request was received; or
+            an internal event of a successful session reinstatement is
+            received. In all these cases, the transport connection is
+            closed.
+
+
+6.2. Session
+
+6.2.1. Client Session
+
+                                 +----+-----------+
+                    +----------->| Q1 |    FREE   |
+                    |            +----+-----------+
+                 N6 |              | N1         ^ N3
+                    |              |            |
+                    |              v            |
+     +----+-----------+    N5    +----+-----------+
+     | Q4 |   FAILED  |<---------| Q3 | LOGGED_IN |
+     +----+-----------+          +----+-----------+
+                    |              ^
+                    |              |
+                    +--------------+
+                           N4
+
+
+   The state transition table is as follows:
+
+        +----+----+----+
+        |Q1  |Q3  |Q4  |
+   -----+----+----+----+
+    Q1  | -  |N1  | -  |
+   -----+----+----+----+
+    Q3  |N3  | -  |N5  |
+   -----+----+----+----+
+    Q4  |N6  |N4  | -  |
+   -----+----+----+----+
+
+
+6.2.2. Server Session
+
+   +-----------------------------------+
+   |                                   | N6
+   |                                   v
+   |                           N11   +----+-----------+
+   |                    +----------->| Q1 |    FREE   |<----+
+   |                    |            +----+-----------+     |
+   |                    |              |            ^       |
+   |                    |           N1 |            | N9    | N3
+   |                    |              v            |       |
+   |                    |            +----+-----------+     |
+   |                    |            | Q2 |   ACTIVE  |     |
+   |                    |            +----+-----------+     |
+   |                    |              |                    |
+   |                    |           N2 |                    |
+   |                    |              v                    |
+   |     +----+-----------+    N10   +----+-----------+     |
+   |     | Q5 | IN_CONTIN |--------->| Q3 | LOGGED_IN |-----+
+   |     +----+-----------+          +----+-----------+
+   |       |            ^              |
+   |    N8 |            | N7           |
+   |       v            |              |
+   |     +----+-----------+            |
+   +-----| Q4 |   FAILED  |<-----------+
+         +----+-----------+    N5
+
+
+   The state transition table is as follows:
+
+        +----+----+----+----+----+
+        |Q1  |Q2  |Q3  |Q4  |Q5  |
+   -----+----+----+----+----+----+
+    Q1  | -  |N1  | -  | -  | -  |
+   -----+----+----+----+----+----+
+    Q2  |N9  | -  |N2  | -  | -  |
+   -----+----+----+----+----+----+
+    Q3  |N3  | -  | -  |N5  | -  |
+   -----+----+----+----+----+----+
+    Q4  |N6  | -  | -  | -  |N7  |
+   -----+----+----+----+----+----+
+    Q5  |N11 | -  |N10 |N8  | -  |
+   -----+----+----+----+----+----+
+
+
+6.2.3. Session States
+
+  -Q1: FREE
+    -client: State on instantiation or after cleanup.
+    -server: State on instantiation or after cleanup.
+  -Q2: ACTIVE
+    -client: Illegal.
+    -server: The first connection in the session transitioned to
+        IN_LOGIN, waiting for it to complete the login process.
+  -Q3: LOGGED_IN
+    -client: Waiting for all session events.
+    -server: Waiting for all session events.
+  -Q4: FAILED
+    -client: Waiting for session recovery or session continuation.
+    -server: Waiting for session recovery or session continuation.
+  -Q5: IN_CONTINUE
+    -client: Illegal.
+    -server: Waiting for session continuation attempt to reach a
+        conclusion.
+
+
+6.2.4. Session State Transitions
+
+  -N1:
+    -client: At least one transport connection reached the LOGGED_IN
+        state.
+    -server: The first connection in the session had reached the
+        IN_LOGIN state.
+  -N2:
+    -client: Illegal.
+    -server: At least one connection reached the LOGGED_IN state.
+  -N3:
+    -client: Graceful closing of the session via session closure.
+    -server: Graceful closing of the session via session closure
+        or a successful session reinstatement cleanly closed the
+        session.
+  -N4:
+    -client: A session continuation attempt succeeded.
+    -server: Illegal.
+  -N5:
+    -client: Session failure occurred.
+    -server: Session failure occurred.
+  -N6:
+    -client: Session state timeout occurred, or a session
+        reinstatement cleared this session instance. This results
+        in the freeing of all associated resources and the session
+        state is discarded.
+    -server: Session state timeout occurred, or a session
+        reinstatement cleared this session instance. This results
+        in the freeing of all associated resources and the session
+        state is discarded.
+  -N7:
+    -client: Illegal.
+    -server: A session continuation attempt is initiated.
+  -N8:
+    -client: Illegal.
+    -server: The last session continuation attempt failed.
+  -N9:
+    -client: Illegal.
+    -server: Login attempt on the leading connection failed.
+  -N10:
+    -client: Illegal.
+    -server: A session continuation attempt succeeded.
+  -N11:
+    -client: Illegal.
+    -server: A successful session reinstatement cleanly closed the
+        session.
+
+
+7. Protocol Data Units
+
+7.1. Common PDU Structure
+
+Each PDU, regardless of request or response, follows a structured wire
+format that includes a fixed length basic header segment, optional
+additional header segments, optional header digest, data segment, and
+data digest.
+
+   Byte/     0       |       1       |       2       |       3       |
+      /              |               |               |               |
+     |0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|
+     +---------------+---------------+---------------+---------------+
+    0/ Basic Header Segment (BHS)                                    /
+    +/                                                               /
+     +---------------+---------------+---------------+---------------+
+   32/ Additional Header Segment 1 (AHS)  (optional)                 /
+    +/                                                               /
+     +---------------+---------------+---------------+---------------+
+   ----
+     +---------------+---------------+---------------+---------------+
+     / Additional Header Segment n (AHS)  (optional)                 /
+    +/                                                               /
+     +---------------+---------------+---------------+---------------+
+    k/ Header-Digest (optional)                                      /
+    +/                                                               /
+     +---------------+---------------+---------------+---------------+
+    l/ Data Segment(optional)                                        /
+    +/                                                               /
+     +---------------+---------------+---------------+---------------+
+    m/ Data-Digest (optional)                                        /
+    +/                                                               /
+     +---------------+---------------+---------------+---------------+
+
+
+7.1.1. Basic Header Segment
+
+The basic header segment is described as follows.
+
+   Byte/     0       |       1       |       2       |       3       |
+      /              |               |               |               |
+     |0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|
+     +---------------+---------------+---------------+---------------+
+    0|. D R  Opcode  | Opcode specific fields                        |
+     +---------------+---------------+---------------+---------------+
+    4|TotalAHSLength | DataSegmentLength                             |
+     +---------------+---------------+---------------+---------------+
+    8| ExchangeID                                                    |
+     +---------------+---------------+---------------+---------------+
+   12/ Opcode specific fields                                        /
+    +/                                                               /
+     +---------------+---------------+---------------+---------------+
+   28| Reserved                                                      |
+     +---------------+---------------+---------------+---------------+
+
+
+  o ChannelFlag [D]
+
+  0x0 - fore channel command (a.k.a., client call)
+  0x1 - back channel command (a.k.a., server callback)
+
+  Each session implicitly has two logical channels, namely, a fore
+  channel and a back channel. The fore channel is used by the client to
+  initiate an exchange with the server; vice versa, the back channel the
+  server with the client. Each channel has its own states and/or
+  resources, such as command sequence and slot table. Each connection
+  associated with the session participates in function of both
+  channels with no exception.
+
+  o ResponseFlag [R]
+
+  0x0 - request
+  0x1 - response
+
+  o Opcode
+
+  Exchange opcode.
+
+  o TotalAHSLength
+
+  Total additional header segment length.
+
+  o DataSegmentLength
+
+  Data segment length.
+
+  o ExchangeID
+
+  Exchange unique identifier.
+
+  An exchange consists of a pair of related PDUs exchanged between two
+  parties involved in the communication. One of the PDUs in the pair is
+  a request and the other a response.
+
+  Exchanges serve different functions and therefore have different types
+  or opcodes. Some exchanges are initiated on behalf of the application
+  of the protocol while others of the protocol itself. An exchange may
+  be initiated either by the client or by the server. Each exchange is
+  uniquely identified among all outstanding exchanges in a channel,
+  which is referred to as the ExchangeID in the PDU definition.
+
+
+7.1.2. Command Sequence
+
+A session-wide 32-bit sequence number is established for each channel
+during session creation. Comparisons and arithmetic on the sequence
+number use Serial Number Arithmetic as defined in [RFC1982], where
+SERIAL_BITS = 32.
+
+A command sent over a channel is always assigned the current sequence
+number of that channel and the sequence number is advanced afterwards.
+Commands are delivered to the peer in the sequence order even though
+they may be sent over different connections of the same session. Each
+PDU, in the opposite direction as the command (i.e., from the peer
+back), carries the next sequence number as expected by the peer for
+acknowledgement purposes.
+
+Non-command exchanges may also carry command sequence. They refer to
+the current sequence number of the channel but the sequence number is
+not advanced.
+
+  o CommandSequence
+  o ExpectedCommandSequence
+
+  The command sequence is referred to as CommandSequence and expected
+  command sequence as ExpectedCommandSequence in the PDU definition.
+  Note that each channel has its own CommandSequence and
+  ExpectedCommandSequence.
+
+
+7.1.3. Command Slot
+
+Each of the two channels in the session has a separate command slot
+table that is initialized during session creation. The server is in
+full control of the size of the slot table associated with the fore
+channel while the client the back channel. The initial sizes of the
+two slot tables are advertised in the login process during session
+creation. The sizes are adjusted dynamically with information
+pertaining to flow control carried in PDUs traveling in either
+direction.
+
+  o CurrentMaxSlotID
+  o TargetMaxSlotID
+
+  The owner of the slot table advertises the current size as well as
+  the desired size, referred to as CurrentMaxSlotID and TargetMaxSlotID
+  in the PDU definition, respectively. In case of downsizing, the peer
+  must respect the TargetMaxSlotID by stopping assigning any slots
+  higher than the TargetMaxSlotID immediately while quiescing
+  outstanding commands using those slots.
+
+  o SlotID
+  o SlotSequence
+  o MaxSlotIDInUse
+
+  Each command sent in either channel over the session must be assigned
+  a slot while it remains outstanding. There are two pieces of
+  information pertaining to each slot, referred to as SlotID and
+  SlotSequence in the PDU definition, carried in an exchange. The former
+  serves to identify the slot while the latter the instance of command
+  exchange processed over the slot. The SlotSequence is used by the
+  owner of the slot table for duplicate detection and by the peer for
+  response acknowledgement. In addition to the per slot information, the
+  command also carries the highest slot ID currently in use, referred to
+  as CurrentMaxSlotID in the PDU definition. The information may be used
+  by the owner of the slot table for effectively resource control.
+
+
+7.2. PDU Definitions
+
+7.2.1. Login
+
+7.2.1.1. Login Request PDU
+
+   Byte/     0       |       1       |       2       |       3       |
+      /              |               |               |               |
+     |0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|
+     +---------------+---------------+---------------+---------------+
+    0|. 0 0  Opcode  |A . . . . . . .| VersionLow    | VersionHigh   |
+     +---------------+---------------+---------------+---------------+
+    4|TotalAHSLength | DataSegmentLength                             |
+     +---------------+---------------+---------------+---------------+
+    8| ExchangeID                                                    |
+     +---------------+---------------+---------------+---------------+
+   12| CommandSequence                                               |
+     +---------------+---------------+---------------+---------------+
+   16| ExpectedCommandSequence                                       |
+     +---------------+---------------+---------------+---------------+
+   20| SessionHandle                 | Reserved                      |
+     +---------------+---------------+---------------+---------------+
+   24| TargetMaxSlotID               | CurrentMaxSlotID              |
+     +---------------+---------------+---------------+---------------+
+
+  o Opcode
+
+  Login
+
+  o VersionLow
+  o VersionHigh
+
+  The client specifies a version range defined by the minimum and
+  maximum version inclusive that it speaks. All login requests in the
+  same login sequence must carry the same version range.
+
+  The client must specify the same version range over all connections of
+  the same session. As a result, the server should return the same
+  active version. If the server returns a different active version for
+  each connection, the login must be aborted immediately.
+
+  o SASLFlag [A]
+
+  This flag is set during SASL negotiation to indicate the type of the
+  SASL response generated by the client.
+
+   0x0 - initial response (data segment includes mechanism chosen along
+     with optional initial response data)
+   0x1 - subsequent response
+
+  o CommandSequence
+
+  Refer to the common PDU field descriptions.
+
+  For the first login request of a session, the CommandSequence may be
+  initialized to any arbitrary value for the fore channel.
+
+  o ExpectedCommandSequence
+
+  Refer to the common PDU field descriptions.
+
+  For the first login request of a session, the ExpectedCommandSequence
+  field must be set to the reserved value of 0xffffffff. All subsequent
+  login requests will carry the ExpectedCommandSequence of the session's
+  back channel.
+
+  The ExpectedCommandSequence field assumes the initial value of the
+  CommandSequence carried in the session's first login request before
+  any commands are issued over the back channel.
+
+  o SessionHandle
+
+  Refer to the login description for the initial value of the session
+  handle to use during connection login. Subsequent login requests sent
+  over the same connection should use the value as returned from the
+  first login response.
+
+  o CurrentMaxSlotID
+  o TargetMaxSlotID
+
+  Refer to the common PDU field descriptions.
+
+  These fields refer to the slot table that belongs to the session's
+  back channel. For the first connection of a session, the two fields
+  should have the same value in all login requests sent. For subsequent
+  connections, the values may differ depending on the current flow
+  control condition.
+
+
+7.2.1.2. Login Response PDU
+
+   Byte/     0       |       1       |       2       |       3       |
+      /              |               |               |               |
+     |0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|
+     +---------------+---------------+---------------+---------------+
+    0|. 0 1 Opcode   |A . . . . . . .| VersionActive | VersionHigh   |
+     +---------------+---------------+---------------+---------------+
+    4|TotalAHSLength | DataSegmentLength                             |
+     +---------------+---------------+---------------+---------------+
+    8| ExchangeID                                                    |
+     +---------------+---------------+---------------+---------------+
+   12| ExpectedCommandSequence                                       |
+     +---------------+---------------+---------------+---------------+
+   16| CommandSequence                                               |
+     +---------------+---------------+---------------+---------------+
+   20| SessionHandle                 | LoginStatus   | Reserved      |
+     +---------------+---------------+---------------+---------------+
+   24| TargetMaxSlotID               | CurrentMaxSlotID              |
+     +---------------+---------------+---------------+---------------+
+
+  o Opcode
+
+  Login
+
+  o VersionHigh
+  o VersionActive
+
+  The server responds with the highest version that it supports as well
+  as the active version chosen for this login. All login responses in
+  the same login sequence must carry the same versions.
+
+  The active version is typically chosen as the maximum version that
+  both the client and the server support. However, for subsequent
+  connections, server may choose the active version for the session if
+  that falls in the version range for the connection.
+
+  o SASLFlag [A]
+
+  This flag is set during SASL negotiation to indicate the type of the
+  SASL challenge generated by the server.
+
+   0x0 - challenge
+   0x1 - final outcome (data segment includes optional final data)
+
+  o ExpectedCommandSequence
+
+  Refer to the common PDU field descriptions.
+
+  The ExpectedCommandSequence field assumes the initial value of the
+  CommandSequence carried in the session's first login request before
+  any commands are issued over the fore channel.
+
+  o CommandSequence
+
+  Refer to the common PDU field descriptions.
+
+  For the first login response of a session, the CommandSequence may be
+  initialized to any arbitrary value for the back channel.
+
+  o LoginStatus
+
+  Here is a list of the login statuses server may return to the
+  client. Note that success status is not an indication of successful
+  login completion.
+
+   0x00 - success
+   0x01 - protocol version not supported
+   0x02 - service not found (service not found)
+   0x03 - session not found (invalid session handle)
+   0x04 - ssl not supported
+   0x05 - ssl required
+   0x06 - sasl mechanism not supported
+   0x07 - operational parameter not supported
+   0x7f - generic error
+   0x80-0xff - reserved
+
+  o SessionHandle
+
+  Refer to the login description on the server action regarding the
+  session handle. The same session handle must be returned for all login
+  responses of the same login sequence.
+
+  o CurrentMaxSlotID
+  o TargetMaxSlotID
+
+  Refer to the common PDU field descriptions.
+
+  These fields refer to the slot table that belongs to the session's
+  fore channel. For the first connection of a session, the two fields
+  should have the same value in all login requests sent. For subsequent
+  connections, the values may differ depending on the current flow
+  control condition.
+
+
+7.2.2. Command
+
+7.2.2.1. Command Request PDU
+
+   Byte/     0       |       1       |       2       |       3       |
+      /              |               |               |               |
+     |0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|
+     +---------------+---------------+---------------+---------------+
+    0|. D 0 Opcode   |. . C . . . . .| Reserved                      |
+     +---------------+---------------+---------------+---------------+
+    4|TotalAHSLength | DataSegmentLength                             |
+     +---------------+---------------+---------------+---------------+
+    8| ExchangeID                                                    |
+     +---------------+---------------+---------------+---------------+
+   12| CommandSequence                                               |
+     +---------------+---------------+---------------+---------------+
+   16| ExpectedCommandSequence                                       |
+     +---------------+---------------+---------------+---------------+
+   20| SlotID                        | MaxSlotIDInUse                |
+     +---------------+---------------+---------------+---------------+
+   24| SlotSequence                                                  |
+     +---------------+---------------+---------------+---------------+
+
+  o Opcode
+
+  Command
+
+  o CacheFlag [C]
+
+   0x0 - cache response status only
+   0x1 - cache response status and data
+
+
+7.2.2.2. Command Response PDU
+
+   Byte/     0       |       1       |       2       |       3       |
+      /              |               |               |               |
+     |0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|
+     +---------------+---------------+---------------+---------------+
+    0|. D 1 Opcode   |. . . . . . . .| CommandStatus | Reserved      |
+     +---------------+---------------+---------------+---------------+
+    4|TotalAHSLength | DataSegmentLength                             |
+     +---------------+---------------+---------------+---------------+
+    8| ExchangeID                                                    |
+     +---------------+---------------+---------------+---------------+
+   12| ExpectedCommandSequence                                       |
+     +---------------+---------------+---------------+---------------+
+   16| Reserved                      | SlotID                        |
+     +---------------+---------------+---------------+---------------+
+   20| TargetMaxSlotID               | CurrentMaxSlotID              |
+     +---------------+---------------+---------------+---------------+
+   24| SlotSequence                                                  |
+     +---------------+---------------+---------------+---------------+
+
+  o CommandStatus
+
+   0x00 - success
+   0x01 - invalid slot
+   0x02 - invalid max slot
+   0x03 - sequence misordered
+   0x04 - false retry
+   0x05 - response uncached
+   0x7f - generic failure
+   0x80-0xff - reserved
+
+
+7.2.3. KeepAlive
+
+7.2.3.1. KeepAlive Request PDU
+
+   Byte/     0       |       1       |       2       |       3       |
+      /              |               |               |               |
+     |0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|
+     +---------------+---------------+---------------+---------------+
+    0|. D 0 Opcode   |. . . . . . . .| Reserved                      |
+     +---------------+---------------+---------------+---------------+
+    4|TotalAHSLength | DataSegmentLength                             |
+     +---------------+---------------+---------------+---------------+
+    8| ExchangeID                                                    |
+     +---------------+---------------+---------------+---------------+
+   12| CommandSequence                                               |
+     +---------------+---------------+---------------+---------------+
+   16| ExpectedCommandSequence                                       |
+     +---------------+---------------+---------------+---------------+
+   20| Reserved                      | MaxSlotIDInUse                |
+     +---------------+---------------+---------------+---------------+
+   24| Reserved                                                      |
+     +---------------+---------------+---------------+---------------+
+
+  o Opcode
+
+  KeepAlive
+
+  o CommandSequence
+  o ExpectedCommandSequence
+
+  KeepAlive carries the current CommandSequence associated with the
+  channel without advancing it. It serves to inform the peer where in
+  the command sequence we are.
+
+  o MaxSlotIDInUse
+
+  KeepAlive does not require a slot since it is not a command. This
+  allows KeepAlive to be issued even when the slot table is full for any
+  reason. It carries the MaxSlotIDInUse for flow control purposes.
+
+
+7.2.3.2. KeepAlive Response PDU
+
+   Byte/     0       |       1       |       2       |       3       |
+      /              |               |               |               |
+     |0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|
+     +---------------+---------------+---------------+---------------+
+    0|. D 1 Opcode   |. . . . . . . .| Reserved                      |
+     +---------------+---------------+---------------+---------------+
+    4|TotalAHSLength | DataSegmentLength                             |
+     +---------------+---------------+---------------+---------------+
+    8| ExchangeID                                                    |
+     +---------------+---------------+---------------+---------------+
+   12| ExpectedCommandSequence                                       |
+     +---------------+---------------+---------------+---------------+
+   16| Reserved                                                      |
+     +---------------+---------------+---------------+---------------+
+   20| TargetMaxSlotID               | CurrentMaxSlotID              |
+     +---------------+---------------+---------------+---------------+
+   24| Reserved                                                      |
+     +---------------+---------------+---------------+---------------+
+
+  o Opcode
+
+  KeepAlive
+
+
+7.2.4. Task Management
+
+7.2.4.1. Task Management Request PDU
+
+   Byte/     0       |       1       |       2       |       3       |
+      /              |               |               |               |
+     |0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|
+     +---------------+---------------+---------------+---------------+
+    0|. D 0 Opcode   |. . . . . . . .| MaxSlotIDInUse                |
+     +---------------+---------------+---------------+---------------+
+    4|TotalAHSLength | DataSegmentLength                             |
+     +---------------+---------------+---------------+---------------+
+    8| ExchangeID                                                    |
+     +---------------+---------------+---------------+---------------+
+   12| CommandSequence                                               |
+     +---------------+---------------+---------------+---------------+
+   16| ExpectedCommandSequence                                       |
+     +---------------+---------------+---------------+---------------+
+   20| ReferenceExchangeID                                           |
+     +---------------+---------------+---------------+---------------+
+   24| ReferenceCommandSequence                                      |
+     +---------------+---------------+---------------+---------------+
+
+  o Opcode
+
+  TaskManagement
+
+  o ReferenceExchangeID
+
+  This field refers to the ExchangeID of the command exchange to be
+  aborted.
+
+  o ReferenceCommandSequence
+
+  This field refers to the CommandSequence of the command exchange to be
+  aborted. It must be less than or equal to the CommandSequence carried
+  in the task management itself due to the fact the task management must
+  be issued after the command.
+
+  The task management will be processed as follows. The slot sequence
+  will not be updated if the command is aborted before it is started.
+
+    if (ReferenceExchangeID outstanding in slot table) {
+        if (command abortable) {
+            command aborted after start
+        } else {
+            command not abortable
+        }
+    } else if (ReferenceCommandSequence < ExpectedCommandSequence) {
+        command already completed
+    } else if (command received out of sequence order) {
+        command aborted before start
+    } else {
+        command aborted before arrival
+    }
+
+
+7.2.4.2. Task Management Response PDU
+
+   Byte/     0       |       1       |       2       |       3       |
+      /              |               |               |               |
+     |0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|
+     +---------------+---------------+---------------+---------------+
+    0|. D 1 Opcode   |. . . . . . . .| TMStatus      | Reserved      |
+     +---------------+---------------+---------------+---------------+
+    4|TotalAHSLength | DataSegmentLength                             |
+     +---------------+---------------+---------------+---------------+
+    8| ExchangeID                                                    |
+     +---------------+---------------+---------------+---------------+
+   12| ExpectedCommandSequence                                       |
+     +---------------+---------------+---------------+---------------+
+   16| Reserved                                                      |
+     +---------------+---------------+---------------+---------------+
+   20| TargetMaxSlotID               | CurrentMaxSlotID              |
+     +---------------+---------------+---------------+---------------+
+   24| Reserved                                                      |
+     +---------------+---------------+---------------+---------------+
+
+  o Opcode
+
+  TaskManagement
+
+  o TMStatus
+
+  See Task Management Request PDU for the status descriptions.
+
+   0x00 - command already completed
+   0x01 - command aborted before arrival
+   0x02 - command aborted before start
+   0x03 - command aborted after start
+   0x04 - command not abortable
+   0x7f - generic error
+   0x80-0xff - reserved
+
+
+7.2.5. Logout
+
+7.2.5.1. Logout Request PDU
+
+   Byte/     0       |       1       |       2       |       3       |
+      /              |               |               |               |
+     |0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|
+     +---------------+---------------+---------------+---------------+
+    0|. 0 0 Opcode   |. . . . Reason | Reserved                      |
+     +---------------+---------------+---------------+---------------+
+    4|TotalAHSLength | DataSegmentLength                             |
+     +---------------+---------------+---------------+---------------+
+    8| ExchangeID                                                    |
+     +---------------+---------------+---------------+---------------+
+   12| CommandSequence                                               |
+     +---------------+---------------+---------------+---------------+
+   16| ExpectedCommandSequence                                       |
+     +---------------+---------------+---------------+---------------+
+   20| Reserved                      | MaxSlotIDInUse                |
+     +---------------+---------------+---------------+---------------+
+   24| Reserved                                                      |
+     +---------------+---------------+---------------+---------------+
+
+  o Opcode
+
+  Logout
+
+  o Reason
+
+   0x00 - logout connection
+   0x01 - close session
+
+  o TotalAHSLength
+  o DataSegmentLength
+
+  These fields are reserved.
+
+
+7.2.5.2. Logout Response PDU
+
+
+   Byte/     0       |       1       |       2       |       3       |
+      /              |               |               |               |
+     |0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|
+     +---------------+---------------+---------------+---------------+
+    0|. 0 1 Opcode   |. . . . . . . .| LogoutStatus  | Reserved      |
+     +---------------+---------------+---------------+---------------+
+    4|TotalAHSLength | DataSegmentLength                             |
+     +---------------+---------------+---------------+---------------+
+    8| ExchangeID                                                    |
+     +---------------+---------------+---------------+---------------+
+   12| CommandSequence                                               |
+     +---------------+---------------+---------------+---------------+
+   16| ExpectedCommandSequence                                       |
+     +---------------+---------------+---------------+---------------+
+   20| Reserved                      | MaxSlotIDInUse                |
+     +---------------+---------------+---------------+---------------+
+   24| Reserved                                                      |
+     +---------------+---------------+---------------+---------------+
+
+  o Opcode
+
+  Logout
+
+  o TotalAHSLength
+  o DataSegmentLength
+
+  These fields are reserved.
+
+  o LogoutStatus
+
+   0x00 - success
+   0x7f - generic error
+   0x80-0xff - reserved
+
+
+
+
+8. Open Issues
+
+1) Investigate each of the use cases listed in the beginning of this
+  spec in more details and outline at a high level how they will work
+  on top of the new protocol. Things to look at here include
+
+    - toolkit installation/upgrade
+    - process management
+    - service management (service, security, portal group configuration)
+    - session management (establishment/trunking/recovery)
+    - command timeout
+    - duplex calling
+
+2) We have defined the session PDUs in a more compact binary format.
+  While it is common for a low level protocol, we should investigate
+  if it is possible to use a higher level encoding method such as JSON.
+  The criteria to look at here including message efficiency and ease
+  of programming.
+
+3) The spec covered a variety of errors that we could encounter during
+  the protocol operation and how to deal with each. Most of the errors
+  are recovered automatically without application impact. But there are
+  few situations where that is not possible. While they are alluded to
+  in the spec, we need to explicitly spell them out including the
+  consequences.
+
+4) During session continuation after coming out of APD, we need to issue
+  task management to abort all commands that have been timed out per
+  application request. In doing so, we can ensure the command is no
+  longer active on the server and the slot sequence is in sync again.
+  This may require an additional state in the client-side session state
+  machine, namely Q5/IN_CONTINUE, between Q3 and Q4.
+
+5) The spec conveniently ignored all aspects of service discovery,
+  including enumerating all service endpoints behind a particular
+  network portal, and network portal group configuration for each
+  service. For now, we assume the existence of an out-of-band mechanism
+  for everything the protocol doesn’t do. But the gap may need to be
+  addressed at some point. Service discovery should not be mixed up
+  with regular session management if supported in-band.
+
+6) The protocol is susceptible to race in the case of multi-connection
+  login. When multiple connections try to login to the same service
+  endpoint simultaneously, it may lead to unintended connection login
+  failure as well as session state loss (via unintended reinstatement).
+  A reasonable solution would be to serialize connection login attempt
+  from the same client targeting the same service endpoint.
+  
+

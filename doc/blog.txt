@@ -1,0 +1,225 @@
+http://blog.delphix.com/peng/2013/06/14/delphix-session-protocol/
+
+1. Problem Statement
+
+To write a toy application over a low level abstraction such as socket
+is trivial; to write an enterprise quality distributed application
+that is fault resilient, fast, scalable, and secure is anything
+but. At the center of what drives up the complexity are a variety of
+failure modes inherent with the network, be it connection loss, client
+and/or server restart, silent data corruption, or security attacks
+just to name a few.
+
+Instead of focusing on just the “business logic”, an application
+developer is forced to spend a disproportionate amount of effort to
+address the “network issues” in the application protocol design
+itself. Even for experienced protocol designers, this is usually a
+slow and iterative process. NFSv4.1 and iSCSI are perfect examples,
+with over 1000 pages in the combined protocol spec and a significant
+portion dedicated to issues not directly related to file or block
+access.
+
+For example, a session must be established between the client and
+server application in order to issue remote operations. Session
+management is a complicated task that involves endpoint
+identification, authentication, optional parameter negotiation,
+connection and session recovery, graceful termination, just to name a
+few. This is typically addressed in the context of a specific protocol
+with complex state machines that are both obscure and difficult to get
+right (f.g., refer to RFC 3720, sections 5-7).
+
+Another example involves the capability to cancel an outstanding
+remote operation. This is crucial for applications that want to retain
+control over the course of long running operations or to remain
+responsive in presence of extended network outage. Unfortunately, this
+is usually an afterthought in the protocol design if not completely
+ignored. When baked into the protocol, it is likely to be complex and
+error prone due to its interaction with the data path.
+
+Rather than trying to solve the same problems over and over for each
+application, wouldn’t it be great if they can be addressed at a lower
+level once and for all? This common substrate would “tame” the network
+in such a way that the problems would be addressed before they even
+bubble up. This is where the Delphix Session Protocol comes in…
+
+2. Protocol Overview
+
+Delphix Session Protocol, or DSP, is a communication protocol that
+operates at the session and presentation layer in the OSI model. DSP
+is officially registered with the Internet Assigned Numbers Authority
+under the service name of dlpx-sp and port number 8415.
+
+  +---------------+------------------------------------------------+
+  | Application   | Application Specific Logic                     |
+  +---------------+------------------------------------------------+
+  | Presentation  | Data Encoding, Digest, Compression, Encryption |
+  +---------------+------------------------------------------------+
+  | Session       | Connection Management, Error Recovery,         |
+  |               | Security, Remote Operations                    |
+  +---------------+------------------------------------------------+
+  | Transport     | End-to-End Connection, Message Segmentation,   |
+  |               | Sequencing, Reliability, Flow Control          |
+  +---------------+------------------------------------------------+
+  | Network       | Packet Fragmentation, Routing,                 |
+  |               | Logical Addressing                             |
+  +---------------+------------------------------------------------+
+  | Data Link     | Physical Addressing                            |
+  +---------------+------------------------------------------------+
+  | Physical      | Media, Signal, Binary Transmission             |
+  +---------------+------------------------------------------------+
+
+On top of the protocol is a java based service framework with the
+following features.
+
+ o full duplex remote operation execution and end-to-end cancellation
+support
+
+ o advanced connectivity model with connection trunking and ordered
+delivery
+
+ o fault resilience with automatic connection and session recovery,
+exactly-once semantics, and optional data digest
+
+ o high performance with concurrent execution, session flow control,
+optional data compression and bandwidth throttling
+
+ o build-in security support with pluggable SASL authentication
+mechanisms and optional TLS encryption
+
+ o asynchronous model for session management and remote operation
+
+Most of the features above are essential to the proper operation of a
+distributed application and yet non-trivial to implement. By offering
+them in the framework, we can significantly simplify the development
+of enterprise quality distributed applications.
+
+3. Key Features
+
+The foundation of DSP is built on top of a few key abstractions,
+namely, exchange, task, nexus, and service. For an overview of how DSP
+works and the features it provides, let’s start with these
+abstractions.
+
+An exchange refers to an application defined protocol data unit which
+may be a request or a response. DSP supports the request-response
+pattern for communication. For each request sent, there is a
+corresponding response which describes the result of the execution. An
+application protocol is made up of a set of exchanges.
+
+A nexus (a.k.a., session) refers to a logical conduit between the
+client and server application. In contrast, a transport connection
+(a.k.a., connection) refers to a “physical” link. A nexus has a
+separate naming scheme from the connection, which allows it to be
+uniquely and persistently identified independent of the physical
+infrastructure. A nexus has a different lifecycle than the
+connection. It is first established over a leading connection. After
+it comes into existence, new connections may be added and existing
+ones removed. It must have at least one connection to remain
+operational but may live on even after all connections are lost. Nexus
+lifecycle management actions, such as create, recover, and destroy,
+are always initiated by the client with the server remaining passive.
+
+A nexus has dual channels, namely, the fore channel and the back
+channel. The fore channel is used for requests initiated from the
+client to the server; and the back channel from the server to the
+client. From a request execution perspective, the nexus is full duplex
+and the channels are functionally identical, modulo the operational
+parameters that may be negotiated independently for each channel. A
+channel supports a number of features for request processing, such as
+ordered delivery, concurrent execution, remote cancellation,
+exactly-once semantics, and throughput throttling.
+
+A service refers to a contract that consists of all exchanges (both
+the requests and the corresponding responses) defined in an
+application protocol. Given the full duplex nature of request
+execution in DSP, part of the service is fulfilled by the server and
+the remaining by the client, where the client and server are from the
+nexus management perspective.
+
+A task implements a workflow that typically involves multiple requests
+executed in either or both directions over the nexus. A task is a
+self-contained building block, available in the form of a sharable
+module including both the protocol exchanges and implementation, that
+can be easily integrated into other application protocols. A library
+of tasks may significantly simplify distributed application
+development by making it more of an assembly experience.
+
+The following is a diagram that illustrates the key abstractions and
+how they are related to each other.
+
+     +-------------------+                         +-------------------+
+     |    Application    |                         |    Application    | +----------------------+
+     +--------------+    |                         +--------------+    |                        |
+     |    Service   |    |                         |    Service   | <--+------------+           |
+     +--------------+----+                         +--------------+----+            |           |
+            ^         +                                   ^         +               |           |
+      Local |         | Remote                      Local |         | Remote        |           |
+    Execute |         | Execute                   Execute |         | Execute       |           |
+            +         v                                   +         v               +           v
+     +-------------------+                         +-------------------+        +-------------------+
+     |    ClientNexus    |                         |    ServerNexus    | >----> |      Server       |
+     +-------------------+                         +-------------------+        +-------------------+
+            +         +                                   +         +                     ^
+     Client |         | Server                     Server |         | Client              | Service
+   Terminus ^         v Terminus                 Terminus ^         v Terminus            | Terminus
+            |         |                                   |         |                     +
+     +-------------------+                         +-------------------+        +-------------------+
+     | ServiceTransport  |+                        | ServiceTransport  |+       |    ServerManager  |
+     +-------------------+|+                       +-------------------+|+      +-------------------+
+      +-------------------+|                        +-------------------+|                +
+       +-------------------+                         +-------------------+                |
+            |         |                                   |         |                     |
+      x-----+---------+-----------------------------------+---------+---------------------+--------x
+    xx|     |         |          ForeChannel              |         |                     |       xx
+    xx|     |         +---->----------->----------->------+         |                     |      xx|
+     xx     |                                                       |                     |      x |
+      xx    |                    BackChannel                        |                     |       xxx
+      |x    +--------------<-----------<-----------<----------------+                     v        xx
+      xx                                                                              Listening    |x
+     xx              Session Based Communication Protocol                               Port      xx
+     xx--------------------------------------------------------------------------------------------x
+
+
+4. Application Development
+
+Writing an application over DSP is a fairly straightforward
+process. While it is best illustrated with an example, I would like to
+defer that to a future blog post. Instead, I will just outline a few
+major steps involved here.
+
+First of all, one would start with the application protocol
+design. The application protocol defines the sequence of interactions
+between the client and server application and is made up of a set of
+exchanges. Each exchange is a java class that includes a list of
+properties. The content of the exchanges and the sequence in which
+they are sent are application specific.
+
+From the set of exchanges, one would then derive two java interfaces,
+one for the client and the other for the server, with a set of remote
+operations serviced by each. Together, the two protocol interfaces
+make up the service contract fulfilled by the distributed application
+as a whole.
+
+Next, one would provide the implementation of the service
+contract. Specifically, the client implements the protocol client
+interface; and the server the protocol server interface. This is where
+the “business logic” of the application resides.
+
+Finally, one would stand up the application service over DSP. On the
+server side, one would create an application server instance with a
+unique service type and register it with the DSP runtime. On the
+client side, one would create an application connector instance with a
+unique client ID and register it with the DSP runtime. These
+boilerplate classes serve as proxy between the application and the DSP
+runtime. They are minimal in size but highly customizable in terms of
+protocol features desired.
+
+5. Summary
+
+In summary, DSP aims to simplify development of distributed
+applications by separating the application “business logic” from the
+underlying “network issues”. It addresses most of the “network issues”
+in the framework before they bubble up so that application developers
+only need to focus on the “business logic”. It is a significant step
+closer toward bringing local application development experience to the
+distributed environment.

@@ -1,0 +1,9 @@
+Exception External Module
+-------------------------
+
+DSP currently depends on DelphixFatalException and DelphixInterruptedException, which extend RuntimeException in a way
+that is specific to the Delphix management service. Since DSP will eventually be open-sourced and used outside Delphix,
+we ought to eliminate this dependency and employ standard Java exceptions. However, due to the amount of time this
+refactoring would take, we've opted to temporarily move these exception classes (and related helper methods) into an
+external module. Once DSP's dependency on Delphix-specific exceptions has been eliminated, these classes should be moved
+back to appliance/server/core and this module should be eliminated.

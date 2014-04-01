@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+ 
+        http://www.apache.org/licenses/LICENSE-2.0
+ 
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+-->
+
+<!--
+    Copyright (c) 2014 by Delphix. All rights reserved.
+-->
+
+<!--
+    This file defines the Ant targets for all modules.
+-->
+
+<project name="build-all" default="all" basedir=".">
+    <description>
+        Build all modules.
+    </description>
+
+    <!--
+        These items are arranged in dependency order.  If you change anything
+        here, make sure to do a full build from a clean slate to make sure
+        everything still builds.
+    -->
+    <macrodef name="ant-run-all">
+      <attribute name="target" />
+      <sequential>
+        <ant antfile="build.xml" dir="${bld.src.common.dir}/platform" target="@{target}"/>
+        <ant antfile="build.xml" dir="${bld.src.common.dir}/logger" target="@{target}"/>
+        <ant antfile="build.xml" dir="${bld.src.common.dir}/test" target="@{target}"/>
+        <ant antfile="build.xml" dir="${bld.src.common.dir}/exception" target="@{target}"/>
+        <ant antfile="build.xml" dir="${bld.src.protocol.dir}/session" target="@{target}"/>
+        <ant antfile="build.xml" dir="${bld.src.protocol.dir}/remote" target="@{target}"/>
+        <ant antfile="build.xml" dir="${bld.src.protocol.dir}/rmi" target="@{target}"/>
+        <ant antfile="build.xml" dir="${bld.src.example.dir}/example-client" target="@{target}"/>
+        <ant antfile="build.xml" dir="${bld.src.example.dir}/example-server" target="@{target}"/>
+      </sequential>
+    </macrodef>
+
+    <target name="all">
+        <ant-run-all target="all" />
+    </target>
+
+    <target name="warnings">
+        <ant-run-all target="warnings" />
+    </target>
+
+    <!--
+        The remaining targets do not have to be in dependency order.
+    -->
+    <target name="clean">
+        <ant-run-all target="clean" />
+    </target>
+
+    <target name="format">
+        <ant-run-all target="format" />
+    </target>
+
+    <target name="format-check">
+        <ant-run-all target="format-check" />
+    </target>
+
+    <target name="style">
+        <ant-run-all target="style" />
+    </target>
+
+    <target name="test">
+        <ant-run-all target="test" />
+    </target>
+</project>

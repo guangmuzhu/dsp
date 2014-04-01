@@ -1,0 +1,264 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+ 
+        http://www.apache.org/licenses/LICENSE-2.0
+ 
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+-->
+
+<!--
+    Copyright (c) 2014 by Delphix. All rights reserved.
+-->
+
+<!--
+    This file defines the build dependencies for all modules within a project.
+
+    For each module, the following properties are defined:
+
+        <module>.deps   External dependencies required to build the module.  This includes third-party java libraries,
+                        and dependencies to the api of other modules.
+
+        <module>.api    Library path for the archive that contains the api classes and resources.  Packages containing
+                        the word "impl" are not included in this jar. This is typically "<module>_api-1.0.0.jar" in the
+                        module-specific jar directory.
+
+        <module>.all    Library path for the actual archive that contains all classes and resources.  This is typically
+                        "<module>_all-1.0.0.jar" in the module-specific jar directory.
+
+        <module>.runtime External dependencies needed to use the module at runtime.
+
+        <module>.test   Additional dependencies for the module test suite.  These are libraries that are only
+                        used by the test suite.
+
+    These definitions are then assembled in <project>-targ.xml to construct the build targets.
+-->
+
+<project name="dsp-deps">
+
+    <path id="spring.core.jars">
+        <pathelement location="${bld.lib.dir}/aopalliance/aopalliance-1.0.jar"/>
+        <pathelement location="${bld.lib.dir}/spring-framework/spring-aop-4.0.2.RELEASE.jar"/>
+        <pathelement location="${bld.lib.dir}/spring-framework/spring-beans-4.0.2.RELEASE.jar"/>
+        <pathelement location="${bld.lib.dir}/spring-framework/spring-context-support-4.0.2.RELEASE.jar"/>
+        <pathelement location="${bld.lib.dir}/spring-framework/spring-context-4.0.2.RELEASE.jar"/>
+        <pathelement location="${bld.lib.dir}/spring-framework/spring-core-4.0.2.RELEASE.jar"/>
+        <pathelement location="${bld.lib.dir}/spring-framework/spring-expression-4.0.2.RELEASE.jar"/>
+        <pathelement location="${bld.lib.dir}/spring-framework/spring-jdbc-4.0.2.RELEASE.jar"/>
+        <pathelement location="${bld.lib.dir}/spring-framework/spring-jms-4.0.2.RELEASE.jar"/>
+        <pathelement location="${bld.lib.dir}/spring-framework/spring-orm-4.0.2.RELEASE.jar"/>
+        <pathelement location="${bld.lib.dir}/spring-framework/spring-tx-4.0.2.RELEASE.jar"/>
+        <pathelement location="${bld.lib.dir}/spring-framework/spring-web-4.0.2.RELEASE.jar"/>
+    </path>
+
+    <path id="platform.api">
+        <pathelement location="${bld.bin.jar.dir}/platform/platform_api-1.0.0.jar"/>
+    </path>
+
+    <path id="platform.all">
+        <pathelement location="${bld.bin.jar.dir}/platform/platform_all-1.0.0.jar"/>
+    </path>
+
+    <path id="platform.deps"/>
+
+    <path id="platform.runtime">
+        <path refid="platform.all"/>
+    </path>
+
+    <path id="logger.api">
+        <pathelement location="${bld.bin.jar.dir}/logger/logger_api-1.0.0.jar"/>
+    </path>
+
+    <path id="logger.all">
+        <pathelement location="${bld.bin.jar.dir}/logger/logger_all-1.0.0.jar"/>
+    </path>
+
+    <path id="logger.deps">
+        <path refid="platform.api"/>
+        <pathelement location="${bld.lib.dir}/commons/commons-lang-2.4.jar"/>
+        <pathelement location="${bld.lib.dir}/log4j/log4j-1.2.16.jar"/>
+    </path>
+
+    <path id="logger.runtime">
+        <path refid="logger.all"/>
+        <path refid="platform.runtime"/>
+        <pathelement location="${bld.lib.dir}/commons/commons-lang-2.4.jar"/>
+        <pathelement location="${bld.lib.dir}/log4j/log4j-1.2.16.jar"/>
+    </path>
+
+    <path id="test.api">
+        <pathelement location="${bld.bin.jar.dir}/test/test_api-1.0.0.jar"/>
+    </path>
+
+    <path id="test.all">
+        <pathelement location="${bld.bin.jar.dir}/test/test_all-1.0.0.jar"/>
+    </path>
+
+    <path id="test.deps">
+        <path refid="logger.api"/>
+        <path refid="platform.api"/>
+        <pathelement location="${bld.lib.dir}/commons/commons-lang-2.4.jar"/>
+        <pathelement location="${bld.lib.dir}/guava/guava-15.0.jar"/>
+        <pathelement location="${bld.lib.dir}/testng/testng-6.8.8.jar"/>
+    </path>
+
+    <path id="test.runtime">
+        <path refid="test.all"/>
+        <path refid="logger.runtime"/>
+        <pathelement location="${bld.lib.dir}/commons/commons-lang-2.4.jar"/>
+        <pathelement location="${bld.lib.dir}/guava/guava-15.0.jar"/>
+        <pathelement location="${bld.lib.dir}/testng/testng-6.8.8.jar"/>
+    </path>
+
+    <path id="exception.api">
+        <pathelement location="${bld.bin.jar.dir}/exception/exception_api-1.0.0.jar"/>
+    </path>
+
+    <path id="exception.all">
+        <pathelement location="${bld.bin.jar.dir}/exception/exception_all-1.0.0.jar"/>
+    </path>
+
+    <path id="exception.deps"/>
+
+    <path id="exception.runtime">
+        <path refid="exception.all"/>
+    </path>
+
+    <path id="session.api">
+        <pathelement location="${bld.bin.jar.dir}/session/session_api-1.0.0.jar"/>
+    </path>
+
+    <path id="session.all">
+        <pathelement location="${bld.bin.jar.dir}/session/session_all-1.0.0.jar"/>
+    </path>
+
+    <path id="session.deps">
+        <path refid="exception.api"/>
+        <path refid="logger.api"/>
+        <path refid="platform.api"/>
+        <pathelement location="${bld.lib.dir}/commons/commons-lang-2.4.jar"/>
+        <pathelement location="${bld.lib.dir}/commons/commons-validator-1.4.0.jar"/>
+        <pathelement location="${bld.lib.dir}/lz4/lz4-java-1.0.jar"/>
+        <pathelement location="${bld.lib.dir}/netty/netty-3.6.3.Final.jar"/>
+        <pathelement location="${bld.lib.dir}/guava/guava-15.0.jar"/>
+    </path>
+
+    <path id="session.runtime">
+        <path refid="session.all"/>
+        <path refid="exception.runtime"/>
+        <path refid="logger.runtime"/>
+        <path refid="platform.runtime"/>
+        <pathelement location="${bld.lib.dir}/commons/commons-lang-2.4.jar"/>
+        <pathelement location="${bld.lib.dir}/commons/commons-logging-1.1.1.jar"/>
+        <pathelement location="${bld.lib.dir}/commons/commons-validator-1.4.0.jar"/>
+        <pathelement location="${bld.lib.dir}/lz4/lz4-java-1.0.jar"/>
+        <pathelement location="${bld.lib.dir}/netty/netty-3.6.3.Final.jar"/>
+        <pathelement location="${bld.lib.dir}/guava/guava-15.0.jar"/>
+    </path>
+
+    <path id="remote.api">
+        <pathelement location="${bld.bin.jar.dir}/remote/remote_api-1.0.0.jar"/>
+    </path>
+
+    <path id="remote.all">
+        <pathelement location="${bld.bin.jar.dir}/remote/remote_all-1.0.0.jar"/>
+    </path>
+
+    <path id="remote.deps">
+        <path refid="exception.api"/>
+        <path refid="logger.api"/>
+        <path refid="session.api"/>
+        <pathelement location="${bld.lib.dir}/guava/guava-15.0.jar"/>
+    </path>
+
+    <path id="remote.runtime">
+        <path refid="remote.all"/>
+        <path refid="exception.runtime"/>
+        <path refid="logger.runtime"/>
+        <path refid="platform.runtime"/>
+        <path refid="session.runtime"/>
+    </path>
+
+    <path id="rmi.api">
+        <pathelement location="${bld.bin.jar.dir}/rmi/rmi_api-1.0.0.jar"/>
+    </path>
+
+    <path id="rmi.all">
+        <pathelement location="${bld.bin.jar.dir}/rmi/rmi_all-1.0.0.jar"/>
+    </path>
+
+    <path id="rmi.deps">
+        <path refid="exception.api"/>
+        <path refid="logger.api"/>
+        <path refid="session.api"/>
+        <pathelement location="${bld.lib.dir}/easymock/easymock-3.0.jar"/>
+        <pathelement location="${bld.lib.dir}/guava/guava-15.0.jar"/>
+        <pathelement location="${bld.lib.dir}/commons/commons-lang-2.4.jar"/>
+    </path>
+
+    <path id="rmi.runtime">
+        <path refid="rmi.all"/>
+        <path refid="platform.all"/>
+        <path refid="exception.runtime"/>
+        <path refid="logger.runtime"/>
+        <path refid="session.runtime"/>
+        <pathelement location="${bld.lib.dir}/easymock/easymock-3.0.jar"/>
+        <pathelement location="${bld.lib.dir}/easymock/objenesis-1.2.jar"/>
+        <pathelement location="${bld.lib.dir}/cglib/cglib-nodep-3.1.jar"/>
+        <pathelement location="${bld.lib.dir}/guava/guava-15.0.jar"/>
+        <pathelement location="${bld.lib.dir}/commons/commons-lang-2.4.jar"/>
+    </path>
+
+    <path id="example-client.api">
+        <pathelement location="${bld.bin.jar.dir}/example-client/example-client_api-1.0.0.jar"/>
+    </path>
+
+    <path id="example-client.all">
+        <pathelement location="${bld.bin.jar.dir}/example-client/example-client_all-1.0.0.jar"/>
+    </path>
+
+    <path id="example-client.deps">
+        <path refid="exception.api"/>
+        <path refid="logger.api"/>
+        <path refid="remote.api"/>
+        <path refid="session.api"/>
+    </path>
+
+    <path id="example-client.runtime">
+        <path refid="example-client.all"/>
+        <path refid="exception.runtime"/>
+        <path refid="logger.runtime"/>
+        <path refid="remote.runtime"/>
+        <path refid="session.runtime"/>
+    </path>
+
+    <path id="example-server.api">
+        <pathelement location="${bld.bin.jar.dir}/example-server/example-server_api-1.0.0.jar"/>
+    </path>
+
+    <path id="example-server.all">
+        <pathelement location="${bld.bin.jar.dir}/example-server/example-server_all-1.0.0.jar"/>
+    </path>
+
+    <path id="example-server.deps">
+        <path refid="exception.api"/>
+        <path refid="logger.api"/>
+        <path refid="remote.api"/>
+        <path refid="session.api"/>
+    </path>
+
+    <path id="example-server.runtime">
+        <path refid="example-server.all"/>
+        <path refid="exception.runtime"/>
+        <path refid="logger.runtime"/>
+        <path refid="remote.runtime"/>
+        <path refid="session.runtime"/>
+    </path>
+</project>

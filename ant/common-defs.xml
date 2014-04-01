@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+ 
+        http://www.apache.org/licenses/LICENSE-2.0
+ 
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+-->
+
+<!--
+    Copyright (c) 2014 by Delphix. All rights reserved.
+-->
+
+<!--
+    This file provides a set of common Ant property definitions, preset definitions, and macro definitions
+    for each individual project. It is included from the build.xml for the project. F.g., session build.xml
+    includes dsp-defs.xml which in turns includes common-defs.xml. As a result, the Ant property basedir is
+    set relative to the project not the top level ant directory. 
+-->
+
+<project name="common-defs" default="all">
+    <!-- Build properties -->
+    <dirname property="bld.ant.dir" file="${ant.file.common-defs}"/>
+    <property file="${bld.ant.dir}/build.props"/>
+
+    <!-- Tools include -->
+    <import file="${bld.tools.dir}/ant/include.xml"/>
+
+    <!-- Build output directories -->
+    <property name="out.dir" location="${bld.bin.out.dir}/${ant.project.name}"/>
+    <property name="out.class.dir" location="${out.dir}/class"/>
+    <property name="out.class.test.dir" location="${out.dir}/testclass"/>
+
+    <property name="out.jar.dir" location="${bld.bin.jar.dir}/${ant.project.name}"/>
+
+    <presetdef name="delphixjavac">
+        <javac bootclasspathref="javac.bootclasspath" debug="on" includeantruntime="false" source="${javac.source}"
+            target="${javac.target}">
+        </javac>
+    </presetdef>
+
+    <!-- Directory declarations -->
+    <macrodef name="declare-dir">
+        <attribute name="name"/>
+        <attribute name="location"/>
+        <sequential>
+            <property name="@{name}.dir" location="@{location}"/>
+            <condition property="@{name}.dir.exists">
+                <available file="@{location}" type="dir"/>
+            </condition>
+        </sequential>
+    </macrodef>
+
+    <declare-dir name="src" location="src"/>
+    <declare-dir name="resources" location="resources"/>
+    <declare-dir name="test" location="test"/>
+    <declare-dir name="test.resources" location="${test.dir}/resources"/>
+</project>

@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+ 
+        http://www.apache.org/licenses/LICENSE-2.0
+ 
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+-->
+
+<!--
+    Copyright (c) 2014 by Delphix. All rights reserved.
+-->
+
+<!--
+    This file defines a set of common Ant targets. 
+-->
+
+<project name="common-targ">
+    <!--
+        Third-party Ant tasks
+    -->
+    <path id="testng.path">
+        <pathelement location="${bld.lib.dir}/testng/testng-6.8.8.jar"/>
+    </path>
+    <taskdef resource="testngtasks" classpathref="testng.path"/>
+
+    <!--
+        Style-related Ant targets
+    -->
+    <target name="format" depends="format-src,format-test"/>
+    <target name="format-src" if="src.dir.exists">
+        <eclipse-format config="${bld.tools.dir}/eclipse/templates/common/org.eclipse.jdt.core.prefs" srcdir="${src.dir}"/>
+    </target>
+    <target name="format-test" if="test.dir.exists">
+        <eclipse-format config="${bld.tools.dir}/eclipse/templates/common/org.eclipse.jdt.core.prefs" srcdir="${test.dir}"/>
+    </target>
+
+    <target name="format-check" depends="format-check-src,format-check-test"/>
+    <target name="format-check-src" if="src.dir.exists">
+        <eclipse-format-check config="${bld.tools.dir}/eclipse/templates/common/org.eclipse.jdt.core.prefs" srcdir="${src.dir}"/>
+    </target>
+    <target name="format-check-test" if="test.dir.exists">
+        <eclipse-format-check config="${bld.tools.dir}/eclipse/templates/common/org.eclipse.jdt.core.prefs" srcdir="${test.dir}"/>
+    </target>
+
+    <target name="warnings" depends="warnings-src,warnings-test"/>
+    <target name="warnings-src" if="src.dir.exists">
+        <eclipse-compile config="${bld.tools.dir}/eclipse/templates/common/org.eclipse.jdt.core.prefs" classpathid="src.compile.path" dir="${src.dir}"/>
+    </target>
+    <target name="warnings-test" if="test.dir.exists">
+        <eclipse-compile config="${bld.tools.dir}/eclipse/templates/common/org.eclipse.jdt.core.prefs" classpathid="test.compile.path" dir="${test.dir}"/>
+    </target>
+
+    <target name="style" depends="ant-load-checkstyle">
+        <checkstyle config="${ant.checkstyle.config}">
+            <fileset dir="src" includes="**/*.java" erroronmissingdir="false"/>
+            <fileset dir="test" includes="**/*.java" erroronmissingdir="false"/>
+
+            <!-- Output default logger results to a file. -->
+            <!-- The checkstyle config file adds a custom logger that outputs to standard out. -->
+            <formatter type="xml" toFile="checkstyle_results.xml"/>
+        </checkstyle>
+    </target>
+
+    <!--
+        Test-related Ant targets
+    -->
+    <!-- Import Jacoco code coverage Ant tasks -->
+    <taskdef uri="antlib:org.jacoco.ant" resource="org/jacoco/ant/antlib.xml">
+        <classpath path="${bld.lib.dir}/jacoco/jacocoant.jar"/>
+    </taskdef>
+
+    <!-- Defines where the code coverage execution info is written for unit tests -->
+    <property name="out.coverage.file" value="${out.dir}/jacoco.exec"/>
+
+    <!-- Common test target, only invoked if test directory is present -->
+    <target name="test" if="test.dir.exists">
+        <property name="testng.jvmarg2" value=""/>
+        <antcall target="-test-impl"/>
+    </target>
+
+    <!-- Common test target with debugger enabled on port 5005, only invoked if test directory is present -->
+    <target name="test-debug" if="test.dir.exists">
+        <property name="testng.jvmarg2" value="-Xdebug -Xrunjdwp:transport=dt_socket,server=y,address=5005,suspend=y"/>
+        <antcall target="-test-impl"/>
+    </target>
+</project>

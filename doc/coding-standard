@@ -1,0 +1,328 @@
+Copyright Header
+
+All Java files should begin with a copyright header of the form:
+
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+Note the Javadoc style comment. This message must begin on the first line of the file and be followed by an empty line.
+
+For each file created by Delphix (and initially copyright solely to Delphix), a copyright header in the following form will appear after the apache license.
+
+/**
+ * Copyright (c) <year of first change>[, <year of last change> if different] by Delphix. All rights reserved.
+ */
+
+Formatting
+These checks deal only with how code is laid out (brace placement, comments, etc.).
+
+Empty Statements
+
+Empty statements are standalone semi-colons which are usually typos. They serve no real purpose and should be removed. Some examples:
+
+int x = 1 + 2;;  // second semi-colon is an empty statement
+int x + 1 + 2;
+;                // semi-colon on line by itself is an empty statement
+One Statement Per Line
+
+Each line should have at most one statement (one semi-colon). For example this:
+
+x = 1 + 2; y = x + 3;
+Should be split into:
+
+x = 1 + 2;
+y = x + 3;
+Modifier Order
+
+Java allows modifiers on classes, fields, and methods to be listed in any order, but this can make them hard to read. The Java language specification recommends the following order, which we enforce:
+
+public protected private abstract static final transient volatile synchronized native strictfp
+Examples of invalid modifier orders:
+
+final public static String TITLE = "title";
+ 
+static public boolean isInterrupt(Throwable t) { /* ... */ }
+Case Statements
+These guys get their own section.
+
+Case Fall-through
+
+Any case fall-through must be marked with a comment containing the word "FALLTHRU" to make sure it is intentional. Due to the way we check for this comment, it must appear on the line immediately preceding the case statement that we are falling in to, there can be no blank lines separating the comment and case statement. The only operators which prevent fall-through are "return", "throw", "continue", and "break". Assertions can be disabled, so ending a case with "assert false" would still count as a fall-through.
+
+switch (val) {
+ case 0:
+ case 1:        <-- Fall-through okay because the case statements are sequential.
+     x = 0;
+     // FALLTHRU
+ case 2:        <-- Fall-through okay because it is marked with a comment.
+     x = 0;
+     return x;
+ case 3:        <-- No fall-through so no problem.
+     x = 0;
+     throw new DelphixFatalException();
+ case 4:        <-- No fall-through so no problem.
+     x = 0;
+ case 5:        <-- Error due to unmarked fall-through.
+     assert false;
+ case 6:        <-- Error due to unmarked fall-through (asserts can be disabled).
+     x = 0;
+     // FALLTHRU
+  
+ case 7:        <-- Error due to unmarked fall-through (empty line between comment and case statement).
+ }
+Default Always Last
+
+Switch statements allow the "default" case to be declared anywhere. For example:
+
+switch ('b') {
+ case 'a':
+     System.out.println(1);
+     break;
+ default:
+     System.out.println(2);
+     break;
+ case 'b':
+     System.out.println(3);
+     break;
+ }
+Having the default case between other cases can be confusing (what does that code segment output?) and hard to read (in larger switch statements you might think there is no default).
+
+Assignment within an if statement
+The following is discouraged:
+
+if ((foo = getFoo ()) == null) {
+    // do something
+}
+Instead use:
+
+foo = getFoo ();
+if (foo == null) {
+    // do something
+}
+Complicated Code
+These checks look for code that should be simplified to make it more readable.
+
+Extra Nested Blocks
+
+Java allows blocks (code in a set of curly braces) to be declared anywhere. This allows code like this:
+
+int x = 0;
+ { int x = 1; }
+ System.out.println(x); 
+ We only allow blocks in places they are required (e.g. the body of an if statement, loops, etc.).
+
+The one exception to this rule is case statements, where an extra block could be useful in properly scoping variables. However, to be considered valid, all statements in the case must be inside of the block:
+
+case 0:
+     {
+         int x = 0;
+     }
+     break;            <-- Not allowed, statement outside of block.
+ case 1:
+     int x = 0;        <-- Not allowed, statement outside of block.
+     {
+         break;
+     }
+ case 2:
+     {
+         int x = 0;
+         break;
+     }                 <-- Allowed, all statements inside of block.
+ case 3:
+     /* ... */
+Unnecessary Boolean Logic
+
+Comparing Boolean expressions to literal true/false is unnecessary. For example:
+
+if (o1.equals(o2) == false)
+     /* do something */
+could be written as:
+
+if (!o1.equals(o2))
+     /* do something */
+Returning literal true/false from two different branches of an if-statement is unnecessary. For example:
+
+if (o1.equals(o2)) {
+     return false;
+ } else {
+     return true;
+ }
+could be written as:
+
+return !o1.equals(o2);
+Exception Handling
+Enforces rules about how we throw and catch exceptions.
+
+Do not Swallow Interrupts
+A common practice in example Java code is to put a thread to sleep like this:
+
+try {
+     Thread.sleep(millis);
+ } catch (InterruptedException e) {
+     /* ignore */
+ }
+However, if this code is being called by a thread which relies on interrupts for timely cancellation, this code is problematic, because if the interrupt occurs while the thread is asleep things will continue as if the time out had completed successful and the thread will forget that it has been interrupted. This is referred to as "swallowing" the interrupt. T he problem is not just limited to Thread.sleep() , any method which throws InterruptedException or InterruptedIOException (which is unfortunately any method that throws IOException) has this problem.
+
+Obviously, at some point the interrupt does need to be caught and handled, but this should only be by code which is logically in charge of thread state. All other methods should take care not to swallow interrupts using one of the following solutions:
+
+Call uninterrupted methods 
+Some classes, like java.util.concurrent.locks.Condition, provide uninterrupted versions of their interruptible methods (await() vs. awaitUninterruptibly()). If a thread is interrupted while blocking in one of the uninterruptible methods, the interrupt will be saved in the thread's state and not thrown until the next interruptible method is called. Note that this means that if your uninterruptible method blocks for a long time, the thread will not respond to interrupts in a timely manner. Therefore you should only use uninterruptible methods if you know there is some reasonable limit to how long they will wait (for example you are waiting on a lock you know you will be able to get quickly).
+Catch the interrupt's exception and re-interrupt the thread when you are done 
+As a super simple example consider this implementation of an "uninterruptible" thread join:
+
+boolean interrupted = false;
+while (true) {
+    try {
+        thread.join();
+        break;
+    } catch (InterruptedException e) {
+        interrupted = true;
+    }
+}
+if (interrupted)
+    Thread.currentThread().interrupt();
+
+The call to Thread.currentThread().interrupt() will re-interrupt the thread's so that the next call to an interruptible method will throw an interrupted exception (note that the call to Thread.interrupt() does not throw an exception). Also note that we did not immediately re-interrupt the thread in the exception handler, because this could cause the join method to throw another exception, instead we remember that we were interrupted and finish what we were doing before re-interrupting ourselves. More complicated code could also take a similar approach.
+
+Declare your method as throwing InterruptedException or InterruptedIOException 
+This should only be done if it would make sense from the caller's point of view for your method to be interruptible (we don't want every method in our entire stack to declare throws InterruptedException).
+
+Throw a DelphixInterruptedException 
+This is the current fall back for when none of the above is appropriate. Since this is a RuntimeException it should propagate to the thread's top level without forcing anyone to handle it. The disadvantage is that callers of your method might not realize that your method can throw a runtime exception during normal execution and won't handle it properly, but this is still preferable to swallowing the interrupt since the thread will at least stop.
+Throwing Throwable/Exception
+
+Methods should not be declared as throwing Throwable or Exception. For example this is not allowed:
+
+public static String encrypt(String text) throws Exception {
+     /* method body */
+ } 
+Doing so forces callers to either throw Throwable/Exception themselves or catch Throwable/Exception which catches all exceptions. Even unexpected fatal exceptions the caller is not prepared to handle.
+
+A few very special cases are exempt from this check:
+
+Methods overriding Object.finalize()
+Methods implementing InvocationHandler.invoke()
+Unit tests (it is convenient for test methods to be declared as throwing Exception when any exception would indicate a test failure).
+Catching Throwable/Exception/RuntimeException
+
+Note that this rule is not currently enforced because the infrastructure to properly adhere to it does not exist yet.
+
+Catching any of these exception implies that your code is capable of handling every possible runtime exception, including DelphixFatalExceptions, DelphixUserExceptions, interrupt-related exceptions, and fatal exceptions from the JVM (e.g. NullPointerException, ArithmeticException). Many of these exceptions should only be handled at the highest layer of the thread they occur in. For example, wms can decide if an unexpected exception thrown by a worker thread should be ignored, logged, or generate a fault. Another example would be long-running threads that are vital to the operation of the stack (e.g. the object reaper thread) which should catch and log these exceptions to avoid being killed by an unexpected exception.
+
+Catching DelphixFatalException
+
+DelphixFatalExceptions should only be thrown for unrecoverable errors. If there is an instance where a DelphixFatalException is being thrown, but a caller needs to handle the exception then a DelphixModuleException should be thrown instead.
+
+DelphixFatalExceptions should only be handled by the same code that catches all other fatal runtime exceptions, it should not be treated any differently from other fatal exceptions (e.g. NullPointerException) and therefore should not get its own catch clause.
+
+This is not enforced for unit tests since they may want to test for expected fatal exceptions.
+
+Ignoring Exceptions
+
+While ignoring exceptions can sometimes be correct behaviour, empty catch blocks can sometimes be left-over from initial prototyping when proper Exception handling wasn't being considered. This leads to important error information being lost. To prevent this we require all empty catch blocks to contain a comment explaining why the Exception is being ignored:
+
+} catch (InterruptedException e) {
+    Thread.currentThread().interrupt();       <-- Valid, catch body is not empty.
+}
+  
+} catch (TimeoutException e) {
+}                                             <-- Invalid, empty catch body without comment.
+  
+try {
+    ExecuteUtils.executeSudo(RM, "-rf", file);
+} catch (NonZeroExitException e) {
+    // left-over files are okay               <-- Valid, empty catch body with descriptive comment.
+}
+The style checker will allow lazy comments like "// ignored" or "// blah", but they should not be considered good style:
+
+} catch (NonZeroExitException e) {
+     // ignored                                <-- Accepted by style checker, but still bad style
+}
+If you are just prototyping and need the style checker to pass temporarily insert a "TODO" comment so that it will stand out later.
+
+Note that exceptions should never be the "normal" case, so if you find that your comment claims that an exception is "expected" and you are not writing a test case, consider re-structuring the code you are using to return/set some status instead of throwing an exception.
+
+Expected Object Behaviour
+Several of the methods in java.lang.Object have special requirements when being overridden by subclasses. These checks looks for common violations of those requirements.
+
+Overriding equals() and hashCode()
+
+When overriding equals() you must also override hashCode() and vice versa. If you don’t objects considered equal would quite probably hash to different buckets, breaking set (or map) semantics in the process. Writing a good hash function is hard. Thankfully, we use the apache commons lang library and thus have access to HashCodeBuilder which generates reasonably good hashes. You should include any properties used in the implementation of equals() in the implementation of hashCode().
+ 
+
+int hashCode() {
+ return new HashCodeBuilder().append(property1) 
+            .append(property2) 
+            ... 
+            .toHashCode(); }
+Covariant equals()
+If an object defines any single-argument equals() methods it must also override equals(Object). For example, this is not allowed:
+ 
+
+class AlwaysEqual { 
+    boolean equals(AlwaysEqual other) { 
+            return true;
+    } 
+}
+    
+To see why, consider the following code using the AlwaysEqual object:
+ 
+
+AlwaysEqual ae1 = new AlwaysEqual();
+AlwaysEqual ae2 = new AlwaysEqual();
+Object o2 = (Object)ae2; /* o2 and ae2 are the same object */
+  
+System.out.println(ae1.equals(ae2)); /* calls equals(AlwaysEqual) */
+System.out.println(ae1.equals(o2));  /* calls equals(Object) */ 
+
+Will output:
+
+true 
+false 
+
+When writing an equals(Object) method you should structure it as follows:
+boolean equals(Object other) {
+  if(other == this)
+   return true;
+  if(other == null || getClass() != other.getClass())
+   return false;
+  
+  MyClass rhs = (MyClass) other;
+  /** Further equality checking **/
+ }
+Logging
+Do Not Use log4j Directly
+
+The Delphix appliance uses log4j for logging, however all logging should be done with the com.delphix.appliance.logger.Logger class, not through log4j directly. To enforce this only a few classes are allowed to import classes from the org.apache.log4j package.
+Assertions
+Do Not Use JUnit for Assertions
+
+Assertions should be done with org.testng.Assert rather than junit.framework.Assert or org.testng.AssertJUnit. The two APIs are almost identical but pass expected and actual arguments in the opposite order, which leads to inconsistency and, in some cases, bugs.
+Braces around if/else blocks
+The Java language allows for single-statement if blocks without braces. To some, this is makes for more readable code. For others, it represents an opportunity for bugs by accidentally putting multiple statements on a single line. The ideological divide is large, and as a result we explicitly do not mandate one style or the other. However, we do ask that the following guidelines be followed, in addition to the "follow existing style" standard:
+
+Use braces around multi-line, but single statement, if statements:
+
+if (conditional) {
+    callFunction(arg1,
+        arg2);
+}
+Match braces between if/else, even if the else clause is a single statement:
+
+if (conditional) {
+    something1();
+    something2();
+} else {
+    somethingElse();
+}
+

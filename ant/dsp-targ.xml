@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+ 
+        http://www.apache.org/licenses/LICENSE-2.0
+ 
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+-->
+
+<!--
+    Copyright (c) 2014 by Delphix. All rights reserved.
+-->
+
+<!--
+    This file contains project specific Ant targets.
+-->
+
+<project name="dsp-targ" xmlns:jacoco="antlib:org.jacoco.ant">
+    <import file="common-targ.xml"/>
+
+    <!--
+        Classpaths
+    -->
+    <path id="src.compile.path">
+        <path refid="spring.core.jars"/>
+        <path refid="${ant.project.name}.deps"/>
+    </path>
+
+    <path id="test.compile.path">
+        <path refid="spring.core.jars"/>
+        <path refid="${ant.project.name}.deps"/>
+        <pathelement location="${out.class.dir}"/>
+
+        <!-- Test framework -->
+        <path refid="test.api"/>
+        <pathelement location="${bld.lib.dir}/testng/testng-6.8.8.jar"/>
+        <pathelement location="${bld.lib.dir}/spring-framework/spring-test-4.0.2.RELEASE.jar"/>
+    </path>
+
+    <path id="test.run.path">
+        <!-- Main runtime -->
+        <path refid="spring.core.jars"/>
+        <path refid="${ant.project.name}.runtime"/>
+
+        <!-- Test framework -->
+        <path refid="test.api"/>
+        <pathelement location="${bld.lib.dir}/testng/testng-6.8.8.jar"/>
+        <pathelement location="${bld.lib.dir}/jcommander/jcommander-1.35.jar"/>
+        <pathelement location="${bld.lib.dir}/guava/guava-15.0.jar"/>
+        <pathelement location="${bld.lib.dir}/spring-framework/spring-test-4.0.2.RELEASE.jar"/>
+
+        <!-- Test runtime -->
+        <pathelement location="${out.class.test.dir}"/>
+        <pathelement location="${test.resources.dir}"/>
+    </path>
+
+    <!--
+        Build-related Ant targets
+    -->
+    <target name="compile" depends="compile-src,compile-test"/>
+
+    <target name="compile-src" if="src.dir.exists">
+        <mkdir dir="${out.class.dir}"/>
+        <delphixjavac srcdir="${src.dir}" destdir="${out.class.dir}" classpathref="src.compile.path"/>
+    </target>
+
+    <target name="compile-test" if="test.src.dir.exists">
+        <mkdir dir="${out.class.test.dir}"/>
+        <delphixjavac srcdir="${test.src.dir}" destdir="${out.class.test.dir}" classpathref="test.compile.path"/>
+    </target>
+
+    <target name="jar" depends="compile,jar-api,jar-all"/>
+
+    <target name="jar-api" if="src.dir.exists">
+        <mkdir dir="${out.jar.dir}"/>
+        <jar destfile="${out.jar.dir}/${ant.project.name}_api-1.0.0.jar" basedir="${out.class.dir}" excludes="**/impl/**" compress="true">
+            <fileset dir="${resources.dir}" erroronmissingdir="false"/>
+        </jar>
+    </target>
+
+    <target name="jar-all" if="src.dir.exists">
+        <mkdir dir="${out.jar.dir}"/>
+        <jar destfile="${out.jar.dir}/${ant.project.name}_all-1.0.0.jar" basedir="${out.class.dir}" compress="true">
+            <fileset dir="${resources.dir}" erroronmissingdir="false"/>
+        </jar>
+    </target>
+
+    <target name="clean">
+        <delete dir="${out.dir}"/>
+        <delete dir="${out.jar.dir}"/>
+        <delete dir="test-output"/>
+        <delete file="checkstyle_results.xml"/>
+    </target>
+
+    <target name="all" depends="jar"/>
+
+    <!--
+        Test-related Ant targets
+    -->
+    <target name="-test-impl">
+        <echo message="Executing tests for module '${ant.project.name}' ..."/>
+
+        <!-- Collect Jacoco code coverage information -->
+        <jacoco:coverage destfile="${out.coverage.file}">
+            <testng haltonfailure="true"
+                haltonskipped="true" classpathref="test.run.path"
+                listeners="com.delphix.test.DelphixLoggingListener,com.delphix.test.TestngPatternInterceptor,
+                com.delphix.test.TestProfileLogger"
+                outputDir="test-output" verbose="2">
+                <classfileset dir="${out.class.test.dir}" includes="**/*.class"/>
+                <jvmarg line="-Dcom.sun.management.jmxremote.authenticate=false"/>
+                <jvmarg line="-Dcom.sun.management.jmxremote.port=9010"/>
+                <jvmarg line="-Dcom.sun.management.jmxremote.ssl=false"/>
+                <jvmarg line="-Dtest.filter.pattern=${test.filter.pattern}"/>
+                <jvmarg line="-Dlog.dir=${bld.log.dir}"/>
+                <jvmarg line="-Xss2M"/>
+                <jvmarg line="${testng.jvmarg2}"/>
+            </testng>
+        </jacoco:coverage>
+
+        <!-- Generate a report of test coverage -->
+        <jacoco:report>
+            <executiondata>
+                <file file="${out.coverage.file}"/>
+            </executiondata>
+            <structure name="${ant.project.name}">
+                <classfiles>
+                    <fileset dir="${out.class.dir}"/>
+                </classfiles>
+                <sourcefiles>
+                    <fileset dir="${src.dir}"/>
+                </sourcefiles>
+            </structure>
+            <html destdir="${out.dir}/coverage"/>
+        </jacoco:report>
+    </target>
+</project>

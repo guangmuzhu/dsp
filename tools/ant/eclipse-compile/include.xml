@@ -1,0 +1,50 @@
+<?xml version="1.0"?>
+
+<!--
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+ 
+        http://www.apache.org/licenses/LICENSE-2.0
+ 
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+-->
+
+<!--
+    Copyright (c) 2013 by Delphix. All rights reserved.
+-->
+
+<project name="ant-eclipse-compile-include">
+
+    <dirname property="ant.eclipse-compile.dir" file="${ant.file.ant-eclipse-compile-include}" />
+    <property name="ant.eclipse-compile.ecj.jar" location="${ant.eclipse-compile.dir}/ecj-4.2.jar" />
+
+    <macrodef name="eclipse-compile">
+        <attribute name="config" />
+        <attribute name="classpathid" />
+        <attribute name="dir" />
+        <sequential>
+            <java jar="${ant.eclipse-compile.ecj.jar}" fork="true" failonerror="true" outputproperty="compile-output">
+                <arg line="-d none" />
+                <arg value="-7" />
+                <arg value="-properties" />
+                <arg value="@{config}" />
+                <arg value="-cp" />
+                <arg pathref="@{classpathid}" />
+                <arg path="@{dir}" />
+            </java>
+            <fail message="${compile-output}">
+                <condition>
+                    <not>
+                        <equals arg1="${compile-output}" arg2=""/>
+                    </not>
+                </condition>
+            </fail>
+        </sequential>
+    </macrodef>
+
+</project>

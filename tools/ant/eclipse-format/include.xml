@@ -1,0 +1,71 @@
+<?xml version="1.0"?>
+
+<!--
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+ 
+        http://www.apache.org/licenses/LICENSE-2.0
+ 
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+-->
+
+<!--
+    Copyright (c) 2012 by Delphix. All rights reserved.
+-->
+
+<project name="ant-eclipse-format-include">
+
+    <dirname property="ant.eclipse-format.dir" file="${ant.file.ant-eclipse-format-include}" />
+
+    <property name="ant.eclipse-format.plugins.dir" location="${ant.eclipse-format.dir}/plugins/" />
+
+    <macrodef name="eclipse-format">
+        <attribute name="config" />
+        <attribute name="srcdir" />
+        <sequential>
+            <java classname="org.eclipse.equinox.launcher.Main" failonerror="true" fork="true" dir="${ant.eclipse-format.dir}">
+                <classpath>
+                    <fileset dir="${ant.eclipse-format.plugins.dir}" includes="*.jar" />
+                </classpath>
+                <arg value="-quiet" />
+                <arg value="-application" />
+                <arg value="org.eclipse.jdt.core.JavaCodeFormatter" />
+                <arg value="-config" />
+                <arg file="@{config}" />
+                <arg path="@{srcdir}" />
+            </java>
+        </sequential>
+    </macrodef>
+
+    <macrodef name="eclipse-format-check">
+        <attribute name="config" />
+        <attribute name="srcdir" />
+        <sequential>
+            <tempfile destdir="/tmp" property="ant.eclipse-format.temp.dir" />
+            <mkdir dir="${ant.eclipse-format.temp.dir}" />
+            <copy todir="${ant.eclipse-format.temp.dir}">
+                <fileset dir="@{srcdir}" includes="**/*.java" />
+            </copy>
+            <echo message="Checking files..." />
+            <eclipse-format config="@{config}" srcdir="${ant.eclipse-format.temp.dir}" />
+            <exec executable="${ant.eclipse-format.dir}/compare-dir.sh" resultproperty="ant.eclipse-format.diff.result">
+                <arg path="${ant.eclipse-format.temp.dir}" />
+                <arg path="@{srcdir}" />
+            </exec>
+            <delete dir="${ant.eclipse-format.temp.dir}" />
+            <fail message="Listed files are not properly formatted.">
+                <condition>
+                    <not>
+                        <equals arg1="${ant.eclipse-format.diff.result}" arg2="0" />
+                    </not>
+                </condition>
+            </fail>
+        </sequential>
+    </macrodef>
+
+</project>

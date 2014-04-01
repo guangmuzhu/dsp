@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+ 
+        http://www.apache.org/licenses/LICENSE-2.0
+ 
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+-->
+
+<!--
+    Copyright (c) 2013 by Delphix. All rights reserved.
+-->
+
+<project name="lz4" default="all">
+
+    <property name="app" location="../.."/>
+    <property name="app.lib" location="${app}/lib"/>
+
+    <property name="lz4.repo"  location="repo"/>
+    <property name="lz4.src"   location="src"/>
+    <property name="lz4.jni"   location="jni"/>
+    <property name="lz4.build" location="build"/>
+    <property name="lz4.dist"  location="${app.lib}/lz4"/>
+    <property name="lz4.bsrc"  location="${lz4.build}/src"/>
+
+    <target name="init">
+        <mkdir dir="${lz4.build}"/>
+        <mkdir dir="${lz4.dist}"/>
+        <untar src="${lz4.repo}/lz4-java.tar.gz" dest="${lz4.build}" compression="gzip" />
+        <copy todir="${lz4.bsrc}">
+            <fileset dir="${lz4.src}" />
+        </copy>
+        <exec executable="${lz4.jni}/tidyup">
+            <arg value="${lz4.build}/src"/>
+        </exec>
+        <mkdir dir="${lz4.build}/classes"/>
+    </target>
+
+    <target name="compile-java" depends="init">
+        <javac includeAntRuntime="false"
+            srcdir="${lz4.bsrc}/java"
+            source="1.6"
+            target="1.6"
+	    encoding="UTF-8"
+            debug="true"
+            destdir="${lz4.build}/classes"/>
+    </target>
+
+    <target name="compile-jni" depends="init">
+        <ant antfile="build.xml" dir="${lz4.jni}" target="all" inheritall="false" />
+    </target>
+
+    <target name="compile" depends="compile-java, compile-jni" />
+
+    <target name="dist" depends="compile">
+        <mkdir dir="${lz4.dist}" />
+        <jar destfile="${lz4.dist}/lz4-java-1.0.jar">
+            <fileset dir="${lz4.build}/classes" />
+            <fileset dir="${lz4.build}/jni" erroronmissingdir="false" />
+        </jar>
+        <copy todir="${lz4.dist}">
+            <fileset dir="${lz4.repo}">
+                <exclude name="**/*.tar.gz" />
+            </fileset>
+        </copy>
+    </target>
+
+    <target name="all">
+        <antcall target="dist"/>
+        <antcall target="clean"/>
+    </target>
+
+    <target name="clean">
+        <delete dir="${lz4.build}" />
+    </target>
+
+</project>

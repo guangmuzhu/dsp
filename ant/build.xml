@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+ 
+        http://www.apache.org/licenses/LICENSE-2.0
+ 
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+-->
+
+<!--
+    Copyright (c) 2014 by Delphix. All rights reserved.
+-->
+
+<!--
+    Top level Ant build file iterates through all project build targets listed in build-all.xml.
+    It has the same effect as running each project build individually. In addition, it provides
+    the distribution related targets.
+-->
+
+<project name="build" default="all" basedir=".">
+    <description>
+        Create DSP distribution.
+    </description>
+
+    <!-- Build properties -->
+    <dirname property="bld.ant.dir" file="${ant.file.build}"/>
+    <property file="${bld.ant.dir}/build.props"/>
+
+    <target name="dev" description="do a compile and dist" depends="compile,dist"/>
+
+    <target name="precommit" description="sanity checks before a push - clean,style,compile,dist,warnings,test"
+            depends="clean,style,compile,dist,warnings,test"/>
+
+    <target name="all" description="do a compile and dist" depends="clean,compile,dist"/>
+
+    <target name="clean" description="clean build artifacts">
+        <ant antfile="build-all.xml" target="clean"/>
+        <antcall target="bin-clean"/>
+        <antcall target="log-clean"/>
+        <antcall target="dist-clean"/>
+    </target>
+
+    <target name="compile" description="compile sources">
+        <ant antfile="build-all.xml" target="all"/>
+    </target>
+
+    <target name="format">
+        <ant antfile="build-all.xml" target="format"/>
+    </target>
+
+    <target name="format-check">
+        <ant antfile="build-all.xml" target="format-check"/>
+    </target>
+
+    <target name="style">
+        <ant antfile="build-all.xml" target="style"/>
+    </target>
+
+    <target name="warnings">
+        <ant antfile="build-all.xml" target="warnings"/>
+    </target>
+
+    <target name="test" description="run module unit tests">
+        <ant antfile="build-all.xml" target="test"/>
+    </target>
+
+    <target name="bin-clean" description="clean the bin dir">
+        <delete dir="${bld.bin.out.dir}"/>
+        <delete dir="${bld.bin.jar.dir}"/>
+    </target>
+
+    <target name="log-clean" description="clean the log dir">
+        <delete dir="${bld.log.dir}"/>
+    </target>
+
+    <target name="dist" description="build distributable/deployable artifacts">
+        <antcall target="-dist-lib"/>
+        <antcall target="-dist-doc"/>
+        <antcall target="-dist-bin"/>
+    </target>
+
+    <target name="-dist-lib">
+        <mkdir dir="${bld.dist.lib.dir}"/>
+        <copy todir="${bld.dist.lib.dir}">
+            <fileset dir="${bld.bin.jar.dir}">
+                <include name="**/*_all*.jar"/>
+                <exclude name="example-client/example-client_all-1.0.0.jar"/>
+                <exclude name="example-server/example-server_all-1.0.0.jar"/>
+                <exclude name="test/test_all-1.0.0.jar"/>
+            </fileset>
+            <fileset dir="${bld.lib.dir}">
+                <include name="**/*.jar"/>
+            </fileset>
+        </copy>
+    </target>
+
+    <target name="-dist-doc">
+        <mkdir dir="${bld.dist.doc.dir}"/>
+        <copy todir="${bld.dist.doc.dir}">
+            <fileset dir="${bld.doc.dir}">
+                <include name="**/*"/>
+            </fileset>
+        </copy>
+    </target>
+
+    <target name="-dist-bin">
+        <mkdir dir="${bld.dist.bin.dir}"/>
+    </target>
+
+    <target name="dist-clean" description="clean the dist dir">
+        <delete dir="${bld.dist.dir}"/>
+    </target>
+</project>

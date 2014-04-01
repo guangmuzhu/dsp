@@ -1,0 +1,67 @@
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+#
+# Copyright (c) 2014 by Delphix. All rights reserved.
+#
+
+#
+# bld.ant.dir must be set prior to including the properties file
+#
+bld.top.dir=${bld.ant.dir}/..
+
+bld.src.dir=${bld.top.dir}/src
+bld.src.common.dir=${bld.src.dir}/common
+bld.src.protocol.dir=${bld.src.dir}/protocol
+bld.src.example.dir=${bld.src.dir}/example
+
+bld.doc.dir=${bld.top.dir}/doc
+
+bld.lib.dir=${bld.top.dir}/lib
+
+bld.tools.dir=${bld.top.dir}/tools
+
+bld.bin.dir=${bld.top.dir}/bin
+bld.bin.jar.dir=${bld.bin.dir}/jar
+bld.bin.out.dir=${bld.bin.dir}/out
+
+bld.dist.dir=${bld.top.dir}/dist
+bld.dist.lib.dir=${bld.dist.dir}/lib
+bld.dist.doc.dir=${bld.dist.dir}/doc
+bld.dist.bin.dir=${bld.dist.dir}/bin
+
+bld.log.dir=${bld.top.dir}/log
+
+#
+# Cross platform build properties for lz4
+#
+hpux=172.16.100.140
+hpux.user=ora1024
+hpux.password=ora1024
+
+aix=172.16.100.80
+aix.user=ora1024
+aix.password=ora1024
+
+sunos_sparc=172.16.100.224
+sunos_sparc.user=ora1024
+sunos_sparc.password=ora1024
+
+sunos_x86=172.16.100.248
+sunos_x86.user=ora1024
+sunos_x86.password=ora1024
+
+linux=build-native-linux
+linux.user=ora9208
+linux.password=ora9208

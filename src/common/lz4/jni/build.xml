@@ -1,0 +1,276 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+ 
+        http://www.apache.org/licenses/LICENSE-2.0
+ 
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+-->
+
+<!--
+    Copyright (c) 2013 by Delphix. All rights reserved.
+-->
+
+<project name="jni" default="all">
+
+    <tstamp>
+        <format property="time" pattern="yyMMddHHmmssSSS"/>
+    </tstamp>
+
+    <property name="app" location="../../.."/>
+    <property name="app.server" location="${app}/server"/>
+    <property file="${app.server}/build.properties"/>
+
+    <property name="lz4.jni.top" location=".."/>
+    <property name="lz4.jni.config" location="${lz4.jni.top}/jni"/>
+    <property name="lz4.jni.build" location="${lz4.jni.top}/build"/>
+    <property name="lz4.jni.dist" location="${lz4.jni.build}/jni"/>
+
+    <path id="jsch.classpath">
+        <pathelement path="${app}/ant/lib/jsch-0.1.49.jar"/>
+        <pathelement path="${app}/ant/lib/ant-jsch-1.8.2.jar" />
+    </path>
+
+    <taskdef name="scp"
+        classname="org.apache.tools.ant.taskdefs.optional.ssh.Scp"
+        classpathref="jsch.classpath"/>
+
+    <taskdef name="sshexec"
+        classname="org.apache.tools.ant.taskdefs.optional.ssh.SSHExec"
+        classpathref="jsch.classpath"/>
+
+    <target name="all">
+        <antcall target="hpux"/>
+        <antcall target="aix"/>
+        <antcall target="linux"/>
+        <antcall target="sunos_sparc"/>
+        <antcall target="sunos_x86"/>
+        <antcall target="dist"/>
+    </target>
+
+    <target name="dist">
+        <mkdir dir="${lz4.jni.dist}"/>
+        <antcall target="hpux-dist"/>
+        <antcall target="aix-dist"/>
+        <antcall target="linux-dist"/>
+        <antcall target="sunos_sparc-dist"/>
+        <antcall target="sunos_x86-dist"/>
+    </target>
+
+    <target name="clean" description="clean up the dist dir">
+        <delete dir="${lz4.jni.dist}"/>
+    </target>
+
+    <target name="hpux">
+        <sshexec host="${hpux}"
+            username="${hpux.user}"
+            password="${hpux.password}"
+            verbose="true"
+            trust="yes"
+            command="mkdir /tmp/build.${time}"/>
+        <scp todir="${hpux.user}@${hpux}:/tmp/build.${time}"
+            password="${hpux.password}"
+            trust="yes">
+            <fileset dir="${lz4.jni.build}">
+                <include name="**/src/**" />
+                <include name="**/classes/**" />
+            </fileset>
+            <fileset dir="${lz4.jni.config}">
+                <include name="**/hpux/*" />
+                <include name="**/build.ksh" />
+                <include name="**/Makefile" />
+            </fileset>
+        </scp>
+        <sshexec host="${hpux}"
+            username="${hpux.user}"
+            password="${hpux.password}"
+            verbose="true"
+            trust="yes"
+            command="cd /tmp/build.${time}; ksh ./build.ksh"/>
+    </target>
+
+    <target name="aix">
+        <sshexec host="${aix}"
+            username="${aix.user}"
+            password="${aix.password}"
+            verbose="true"
+            trust="yes"
+            command="mkdir /tmp/build.${time}"/>
+        <scp todir="${aix.user}@${aix}:/tmp/build.${time}"
+            password="${aix.password}"
+            trust="yes">
+            <fileset dir="${lz4.jni.build}">
+                <include name="**/src/**" />
+                <include name="**/classes/**" />
+            </fileset>
+            <fileset dir="${lz4.jni.config}">
+                <include name="**/aix/*" />
+                <include name="**/build.ksh" />
+                <include name="**/Makefile" />
+            </fileset>
+        </scp>
+        <sshexec host="${aix}"
+            username="${aix.user}"
+            password="${aix.password}"
+            verbose="true"
+            trust="yes"
+            command="cd /tmp/build.${time}; ksh ./build.ksh"/>
+    </target>
+
+    <target name="linux">
+        <sshexec host="${linux}"
+            username="${linux.user}"
+            password="${linux.password}"
+            verbose="true"
+            trust="yes"
+            command="mkdir /tmp/build.${time}"/>
+        <scp todir="${linux.user}@${linux}:/tmp/build.${time}"
+            password="${linux.password}"
+            trust="yes">
+            <fileset dir="${lz4.jni.build}">
+                <include name="**/src/**" />
+                <include name="**/classes/**" />
+            </fileset>
+            <fileset dir="${lz4.jni.config}">
+                <include name="**/linux/*" />
+                <include name="**/build.ksh" />
+                <include name="**/Makefile" />
+            </fileset>
+        </scp>
+        <sshexec host="${linux}"
+            username="${linux.user}"
+            password="${linux.password}"
+            verbose="true"
+            trust="yes"
+            command="cd /tmp/build.${time}; ksh ./build.ksh"/>
+    </target>
+
+    <target name="sunos_sparc">
+        <sshexec host="${sunos_sparc}"
+            username="${sunos_sparc.user}"
+            password="${sunos_sparc.password}"
+            verbose="true"
+            trust="yes"
+            command="mkdir /tmp/build.${time}"/>
+        <scp todir="${sunos_sparc.user}@${sunos_sparc}:/tmp/build.${time}"
+            password="${sunos_sparc.password}"
+            trust="yes">
+            <fileset dir="${lz4.jni.build}">
+                <include name="**/src/**" />
+                <include name="**/classes/**" />
+            </fileset>
+            <fileset dir="${lz4.jni.config}">
+                <include name="**/sunos/*" />
+                <include name="**/build.ksh" />
+                <include name="**/Makefile" />
+            </fileset>
+        </scp>
+        <sshexec host="${sunos_sparc}"
+            username="${sunos_sparc.user}"
+            password="${sunos_sparc.password}"
+            verbose="true"
+            trust="yes"
+            command="cd /tmp/build.${time}; ksh ./build.ksh"/>
+    </target>
+
+    <target name="sunos_x86">
+        <sshexec host="${sunos_x86}"
+            username="${sunos_x86.user}"
+            password="${sunos_x86.password}"
+            verbose="true"
+            trust="yes"
+            command="mkdir /tmp/build.${time}"/>
+        <scp todir="${sunos_x86.user}@${sunos_x86}:/tmp/build.${time}"
+            password="${sunos_x86.password}"
+            trust="yes">
+            <fileset dir="${lz4.jni.build}">
+                <include name="**/src/**" />
+                <include name="**/classes/**" />
+            </fileset>
+            <fileset dir="${lz4.jni.config}">
+                <include name="**/sunos/*" />
+                <include name="**/build.ksh" />
+                <include name="**/Makefile" />
+            </fileset>
+        </scp>
+        <sshexec host="${sunos_x86}"
+            username="${sunos_x86.user}"
+            password="${sunos_x86.password}"
+            verbose="true"
+            trust="yes"
+            command="cd /tmp/build.${time}; ksh ./build.ksh"/>
+    </target>
+
+    <target name="hpux-dist" description="Copy the compiled binaries">
+        <scp file="${hpux.user}@${hpux}:/tmp/build.${time}/build/jni/*"
+            todir="${lz4.jni.dist}"
+            password="${hpux.password}"
+            trust="yes"/>
+        <sshexec host="${hpux}"
+            username="${hpux.user}"
+            password="${hpux.password}"
+            verbose="true"
+            trust="yes"
+            command="rm -rf /tmp/build.${time}"/>
+    </target>
+
+    <target name="aix-dist" description="Copy the compiled binaries">
+        <scp file="${aix.user}@${aix}:/tmp/build.${time}/build/jni/*"
+            todir="${lz4.jni.dist}"
+            password="${aix.password}"
+            trust="yes"/>
+        <sshexec host="${aix}"
+            username="${aix.user}"
+            password="${aix.password}"
+            verbose="true"
+            trust="yes"
+            command="rm -rf /tmp/build.${time}"/>
+    </target>
+
+    <target name="linux-dist" description="Copy the compiled binaries">
+        <scp file="${linux.user}@${linux}:/tmp/build.${time}/build/jni/*"
+            todir="${lz4.jni.dist}"
+            password="${linux.password}"
+            trust="yes"/>
+        <sshexec host="${linux}"
+            username="${linux.user}"
+            password="${linux.password}"
+            verbose="true"
+            trust="yes"
+            command="rm -rf /tmp/build.${time}"/>
+    </target>
+
+    <target name="sunos_sparc-dist" description="Copy the compiled binaries">
+        <scp file="${sunos_sparc.user}@${sunos_sparc}:/tmp/build.${time}/build/jni/*"
+            todir="${lz4.jni.dist}"
+            password="${sunos_sparc.password}"
+            trust="yes"/>
+        <sshexec host="${sunos_sparc}"
+            username="${sunos_sparc.user}"
+            password="${sunos_sparc.password}"
+            verbose="true"
+            trust="yes"
+            command="rm -rf /tmp/build.${time}"/>
+    </target>
+
+    <target name="sunos_x86-dist" description="Copy the compiled binaries">
+        <scp file="${sunos_x86.user}@${sunos_x86}:/tmp/build.${time}/build/jni/*"
+            todir="${lz4.jni.dist}"
+            password="${sunos_x86.password}"
+            trust="yes"/>
+        <sshexec host="${sunos_x86}"
+            username="${sunos_x86.user}"
+            password="${sunos_x86.password}"
+            verbose="true"
+            trust="yes"
+            command="rm -rf /tmp/build.${time}"/>
+    </target>
+
+</project>

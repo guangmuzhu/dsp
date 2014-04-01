@@ -1,0 +1,17 @@
+In the unit test, we generate a self signed certificate along with the private key for the server. The
+server certificate is then exported from the keystore and imported into the truststore on the client.
+The client creates a trust manager based on the truststore as part of the SSL context initialization.
+The trust manager is called upon during SSL handshake to validate the server certificate chain which
+contains but one self-signed certificate. In real life, the certificate chain validation tends to be a
+bit more complicated. But in unit test, we would at least want to go through the certificate validation
+code path rather than using a "blind" trust manager.
+
+The test key and trust stores are generated as follows. The relevant parameters are passed to unit test
+via testng @Parameters annotation.
+
+# keytool -genkey -alias dsp -keysize 2048 -validity 36500 -keyalg RSA -dname "CN=dsp" \
+  -keypass dspkey -storepass dspkey -keystore dsp.jks
+
+# keytool -exportcert -alias dsp -keystore dsp.jks -storepass dspkey -file dsp.cert
+
+# keytool -importcert -alias dsp -file dsp.cert -keystore trust.dsp -storepass dspkey

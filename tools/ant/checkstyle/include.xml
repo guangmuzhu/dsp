@@ -1,0 +1,63 @@
+<?xml version="1.0"?>
+
+<!--
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+ 
+        http://www.apache.org/licenses/LICENSE-2.0
+ 
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+-->
+
+<!--
+    Copyright (c) 2013 by Delphix. All rights reserved.
+-->
+
+<project name="ant-checkstyle-include">
+
+    <dirname property="ant.checkstyle.dir" file="${ant.file.ant-checkstyle-include}" />
+
+    <property name="ant.checkstyle.version" value="5.6" />
+    <property name="ant.checkstyle.install.dir" value="${ant.checkstyle.dir}/install-${ant.checkstyle.version}" />
+    <property name="ant.checkstyle.files" value="${ant.checkstyle.dir}/files-${ant.checkstyle.version}" />
+
+    <available property="ant.checkstyle.installed" file="${ant.checkstyle.install.dir}" type="dir" />
+
+    <property name="ant.checkstyle.config.dir" location="${ant.checkstyle.dir}/config/" />
+    <property name="ant.checkstyle.config" location="${ant.checkstyle.dir}/config/checks.xml" />
+
+    <property name="ant.checkstyle.extensions.src.dir" location="${ant.checkstyle.dir}/extensions/" />
+    <property name="ant.checkstyle.extensions.build.dir" location="${ant.checkstyle.dir}/build/" />
+
+    <target name="-ant-checkstyle-install" unless="ant.checkstyle.installed">
+        <untar src="${ant.checkstyle.dir}/checkstyle-${ant.checkstyle.version}-bin.tar.gz"
+               dest="${ant.checkstyle.dir}" compression="gzip" />
+        <move file="${ant.checkstyle.dir}/checkstyle-${ant.checkstyle.version}"
+              tofile="${ant.checkstyle.install.dir}" />
+    </target>
+
+    <target name="-ant-checkstyle-build-extensions" depends="-ant-checkstyle-install">
+        <mkdir dir="${ant.checkstyle.extensions.build.dir}" />
+        <javac srcdir="${ant.checkstyle.extensions.src.dir}" includeantruntime="false" destdir="${ant.checkstyle.extensions.build.dir}">
+          <classpath>
+                <fileset dir="${ant.checkstyle.install.dir}" includes="*.jar" />
+          </classpath>
+        </javac>
+    </target>
+
+    <target name="ant-load-checkstyle" depends="-ant-checkstyle-install,-ant-checkstyle-build-extensions" unless="ant.checkstyle.loaded">
+        <taskdef resource="checkstyletask.properties">
+            <classpath>
+                <fileset dir="${ant.checkstyle.install.dir}" includes="*.jar" />
+                <pathelement path="${ant.checkstyle.extensions.build.dir}" />
+            </classpath>
+        </taskdef>
+        <property name="ant.checkstyle.loaded" value="true" />
+    </target>
+
+</project>
