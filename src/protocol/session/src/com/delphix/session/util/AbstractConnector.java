@@ -212,6 +212,9 @@ public abstract class AbstractConnector extends AbstractService {
         proposal.setOption(LOGOUT_TIMEOUT, configurator.getLogoutTimeoutSeconds());
         proposal.setOption(MIN_KEEPALIVE_TIME, configurator.getAPDTimeoutSeconds());
 
+        proposal.setOption(RECOVERY_INTERVAL, configurator.getRecoveryInterval());
+        proposal.setOption(RECOVERY_TIMEOUT, configurator.getRecoveryTimeout());
+
         proposal.setOption(HEADER_DIGEST, configurator.getHeaderDigestMethods());
         proposal.setOption(FRAME_DIGEST, configurator.getFrameDigestMethods());
         proposal.setOption(PAYLOAD_DIGEST, configurator.getPayloadDigestMethods());

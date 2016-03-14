@@ -178,6 +178,9 @@ public abstract class AbstractService implements Service {
         protected static final int SEND_BUFFER_SIZE = 256 * 1024;
         protected static final int RECEIVE_BUFFER_SIZE = 256 * 1024;
 
+        protected static final int RECOVERY_INTERVAL = 10 * 1000;
+        protected static final int RECOVERY_TIMEOUT = 300 * 1000;
+
         protected static final String[] HEADER_DIGEST_METHODS = { "DIGEST_CRC32", "DIGEST_ADLER32", "DIGEST_NONE" };
         protected static final String[] FRAME_DIGEST_METHODS = { "DIGEST_ADLER32", "DIGEST_CRC32", "DIGEST_NONE" };
         protected static final String[] PAYLOAD_DIGEST_METHODS = { "DIGEST_ADLER32", "DIGEST_CRC32", "DIGEST_NONE" };
@@ -199,6 +202,14 @@ public abstract class AbstractService implements Service {
 
         public boolean getCommandSyncDispatch() {
             return COMMAND_SYNC_DISPATCH;
+        }
+
+        public int getRecoveryInterval() {
+            return RECOVERY_INTERVAL;
+        }
+
+        public int getRecoveryTimeout() {
+            return RECOVERY_TIMEOUT;
         }
 
         public List<String> getHeaderDigestMethods() {
