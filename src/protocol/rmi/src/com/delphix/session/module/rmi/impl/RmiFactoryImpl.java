@@ -37,6 +37,8 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public class RmiFactoryImpl implements RmiFactory, ApplicationContextAware {
 
@@ -113,11 +115,14 @@ public class RmiFactoryImpl implements RmiFactory, ApplicationContextAware {
 
                             MethodCallResponse response;
                             try {
-                                response = (MethodCallResponse) nexus.execute(request, done, timeout).get();
+                                response = (MethodCallResponse) nexus.execute(request, done, timeout)
+                                        .get(timeout, TimeUnit.MILLISECONDS);
                             } catch (InterruptedException e) {
                                 throw new DelphixInterruptedException(e);
                             } catch (ExecutionException e) {
                                 throw new RuntimeException(ExceptionUtil.unwrap(e));
+                            } catch (TimeoutException e) {
+                                throw new RuntimeException(e);
                             }
 
                             if (response.getException()) {
