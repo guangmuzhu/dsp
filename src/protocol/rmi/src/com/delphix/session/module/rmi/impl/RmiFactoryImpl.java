@@ -81,7 +81,8 @@ public class RmiFactoryImpl implements RmiFactory, ApplicationContextAware {
     }
 
     @Override
-    public <T> T createProxy(final Class<T> type, final ServiceNexus nexus, final UUID objectId) {
+    public <T> T createProxy(final Class<T> type, final ServiceNexus nexus, final UUID objectId,
+                             final Runnable done, final long timeout) {
         Object proxy = Proxy.newProxyInstance(RmiFactoryImpl.class.getClassLoader(), new Class[] { type },
                 new InvocationHandler() {
                     private RmiMethodOrdering ifm = new RmiMethodOrdering(type);
@@ -112,7 +113,7 @@ public class RmiFactoryImpl implements RmiFactory, ApplicationContextAware {
 
                             MethodCallResponse response;
                             try {
-                                response = (MethodCallResponse) nexus.execute(request).get();
+                                response = (MethodCallResponse) nexus.execute(request, done, timeout).get();
                             } catch (InterruptedException e) {
                                 throw new DelphixInterruptedException(e);
                             } catch (ExecutionException e) {
