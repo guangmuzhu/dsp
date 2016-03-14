@@ -32,6 +32,7 @@ import org.springframework.beans.BeansException;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 
+import java.io.IOException;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
@@ -100,12 +101,15 @@ public class RmiFactoryImpl implements RmiFactory, ApplicationContextAware {
                             request.setObjectId(objectId);
 
                             try {
-                                nexus.execute(request).get();
+                                nexus.execute(request, done, timeout).get(timeout, TimeUnit.MILLISECONDS);
                             } catch (InterruptedException e) {
                                 throw new DelphixInterruptedException(e);
                             } catch (ExecutionException e) {
                                 throw new RuntimeException(ExceptionUtil.unwrap(e));
+                            } catch (TimeoutException e) {
+                                throw new RuntimeException(e);
                             }
+
                             return null;
                         } else {
                             MethodCallRequest request = new MethodCallRequest();
@@ -124,6 +128,9 @@ public class RmiFactoryImpl implements RmiFactory, ApplicationContextAware {
                             } catch (TimeoutException e) {
                                 throw new RuntimeException(e);
                             }
+
+                            if (response == null)
+                                throw new RuntimeException(new IOException("response is null"));
 
                             if (response.getException()) {
                                 throw ExceptionUtil.unwrap(new ExecutionException((Throwable) response.getValue()));
