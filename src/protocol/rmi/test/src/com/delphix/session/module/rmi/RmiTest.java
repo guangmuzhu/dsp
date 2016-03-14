@@ -98,7 +98,7 @@ public class RmiTest extends AbstractTestNGSpringContextTests {
         }
 
         final UUID objectId = response.getObjectId();
-        return rmiFactory.createProxy(type, nexus, objectId);
+        return rmiFactory.createProxy(type, nexus, objectId, null, 0);
     }
 
     public interface SimpleTest extends RemoteService {

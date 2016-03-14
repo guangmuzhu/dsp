@@ -30,5 +30,5 @@ public interface RmiFactory {
 
     public RmiProtocolServer createServer();
 
-    public <T> T createProxy(final Class<T> type, ServiceNexus nexus, UUID objectId, Runnable done, long timeout));
+    public <T> T createProxy(final Class<T> type, ServiceNexus nexus, UUID objectId, Runnable done, long timeout);
 }
