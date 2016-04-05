@@ -19,6 +19,7 @@
 package com.delphix.session.module.rmi.impl;
 
 import com.delphix.session.module.rmi.ObjectCreator;
+import com.delphix.session.module.rmi.Referable;
 import com.delphix.session.module.rmi.RmiProtocolServer;
 
 import com.delphix.session.module.rmi.protocol.*;
@@ -70,7 +71,18 @@ public class RmiProtocolServerImpl implements RmiProtocolServer {
         Method method = info.ifm.getMethod(request.getMethod());
         MethodCallResponse response = new MethodCallResponse();
         try {
-            response.setValue(method.invoke(info.value, request.getArguments()));
+            Object value = method.invoke(info.value, request.getArguments());
+            if (value instanceof Referable) {
+                ExportedObjectInfo refInfo = new ExportedObjectInfo();
+                refInfo.value = value;
+                refInfo.ifm = new RmiMethodOrdering(method.getReturnType());
+                UUID objectId;
+                do {
+                    objectId = UUID.randomUUID();
+                } while (exportedObjects.putIfAbsent(objectId, refInfo) != null);
+                ((Referable) value).setObjectId(objectId);
+            }
+            response.setValue(value);
             response.setException(false);
             return response;
         } catch (IllegalAccessException e) {
