@@ -15,10 +15,10 @@ import java.util.UUID;
  * will save the return value in the `exportedObjects'
  * and set the `objectId' by calling `setObjectId()'.
  * The RMI server should get the `objectId' via
- * `getObjectId()' and create a `ObjectCreateResponse'
+ * `getObjectId()' and create an `ObjectCreateResponse'
  * instance according to the `objectId'.
  * <p/>
- * PS: the return type MUST be a interface.
+ * PS: the return type MUST be an interface.
  */
 public interface Referable {
     UUID getObjectId();
