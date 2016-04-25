@@ -119,10 +119,16 @@ public enum CompressMethod {
          * speed. The JNI version requires a native library which may not be supported on the platform. If it fails
          * to load, we will fail back to the Unsafe version and then the standard java version. The standard java
          * version is only about half the speed of the native version though.
+         *
+         * Edit by Guangmu:
+         * Neither fastestInstance() nor unsafeInstance() is suitable for Solaris.
+         * @see <a href="https://github.com/delphix/dsp/issues/6">
+         *     [BUG] liblz4-java.so crashed with SIGBUS on Solaris 10(sparc)
+         *     </a>
          */
-        LZ4Factory factory = LZ4Factory.fastestInstance();
+        LZ4Factory factory = LZ4Factory.safeInstance();
 
-        logger.infof("Fastest LZ4 instance available: %s", factory);
+        logger.infof("Safe LZ4 instance available: %s", factory);
 
         LZ4Compressor compressor = factory.fastCompressor();
         LZ4Decompressor decompressor = factory.decompressor();
