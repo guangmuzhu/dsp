@@ -86,7 +86,7 @@ public class RemoteFileReader implements StreamReader {
             sync = progress.sync(offset, false);
         }
 
-        return sink.read(offset, data, sync);
+        return sink.read(this.offset + offset, data, sync);
     }
 
     @Override
